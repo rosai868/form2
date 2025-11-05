@@ -624,6 +624,42 @@
             </table>
         </div>
 
+        <!-- 管理者画面のどこかに追加 -->
+<button onclick="testGASConnection()" style="background: #FFA726; margin-top: 10px;">
+    GAS接続テスト
+</button>
+
+<script>
+async function testGASConnection() {
+    try {
+        const url = GAS_API_URL + "?v=" + new Date().getTime();
+        
+        // まずGETリクエストでテスト
+        const getResponse = await fetch(url);
+        const getData = await getResponse.json();
+        console.log("GET成功:", getData);
+        alert("GET接続成功: " + getData.message);
+        
+        // 次にPOSTリクエストでテスト
+        const postResponse = await fetch(url, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ month: "2024-11" })
+        });
+        
+        const postData = await postResponse.json();
+        console.log("POST成功:", postData);
+        alert("POST接続成功: " + postData.message);
+        
+    } catch (error) {
+        console.error("テストエラー:", error);
+        alert("接続エラー: " + error.message);
+    }
+}
+</script>
         <button onclick="exportToCSV()" style="margin-top: 20px;">CSVエクスポート</button>
         
         <div style="margin-top: 30px; padding: 20px; background: #FFFBF7; border: 1px solid #F0EAE4; border-radius: 8px;">
