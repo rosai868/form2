@@ -1482,15 +1482,23 @@ window.addEventListener('DOMContentLoaded', async function() {
                 resultsArea.innerHTML = '<p style="color: #00897B;">サーバー(GAS)で計算を開始しました。結果が出るまで数分お待ちください...</p>';
 
                 try {
-                    // GAS に { month: "YYYY-MM" } というデータを POST で送信
+                    // ★★★ 修正 ★★★
+                    // fetch のオプションから redirect: 'follow' を削除し、
+                    // mode: 'cors' を明記します。
                     const response = await fetch(GAS_API_URL, {
                         method: 'POST',
+                        mode: 'cors', // ★ これを明記
                         body: JSON.stringify({ month: monthKey }),
                         headers: {
                             'Content-Type': 'application/json'
-                        },
-                        redirect: 'follow'
+                        }
+                        // redirect: 'follow' (← これを削除)
                     });
+                    
+                    if (!response.ok) {
+                        // fetchが成功しても、HTTPステータスが 4xx や 5xx の場合
+                        throw new Error(`サーバーからの応答エラー: ${response.statusText}`);
+                    }
                     
                     const result = await response.json();
 
@@ -1501,10 +1509,9 @@ window.addEventListener('DOMContentLoaded', async function() {
                     console.log(result);
                     resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">${result.message}</p>`;
                     
-                    // (TODO: この後、Firestoreの `draftSchedules` の変更を監視し、結果を表示する)
-                    
                 } catch (error) {
                     console.error('勤務表の作成エラー:', error);
+                    // 'Failed to fetch' はここでキャッチされる
                     resultsArea.innerHTML = `<p class="error-message">エラーが発生しました: ${error.message}</p>`;
                 } finally {
                     generateBtn.disabled = false;
