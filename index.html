@@ -6,6 +6,7 @@
     <title>シフト希望管理システム (Firebase版)</title>
     
     <script src="firebase-config.js"></script>
+
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -15,7 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        /* (CSSは変更なし) */
+        /* (CSS ★デザイン全面変更版★) */
         * {
             margin: 0;
             padding: 0;
@@ -280,7 +281,6 @@
             color: #FF9800; background: #FFF3E0; border: 1px solid #FFCC80;
         }
 
-
         .calendar-day.selected {
             border-color: #80CBC4; 
             background-color: #F0FAF9;
@@ -310,7 +310,6 @@
         .calendar-day.selected-夏 {
             border-color: #FF9800; background-color: #FFF3E0;
         }
-
 
         .request-buttons {
             display: grid;
@@ -360,7 +359,6 @@
         .request-button.active[data-type="夏"] {
             background-color: #FFF3E0; border-color: #FF9800; color: #FF9800;
         }
-
 
         .selected-dates {
             margin-top: 20px;
@@ -1459,7 +1457,7 @@
             const resultsArea = document.getElementById('schedule-results');
             
             // ★★★ ここに、GASデプロイ時にコピーした「Web アプリの URL」を貼り付け ★★★
-            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwRihiam4nc3w_3K8Uz6IPH0TYPrknLWWijfQSiBrFX4hll_MRnTzFKaNpILyjCrvJaRg/exec"; // ★URLを確認
+            const GAS_API_URL = "httpsExample"; // ★★★ 必ずあなたのURLに書き換えてください ★★★
 
             generateBtn.addEventListener('click', async () => {
                 
