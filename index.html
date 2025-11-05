@@ -11,8 +11,11 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-functions-compat.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        /* (CSS ★デザイン全面変更版★) */
+        /* (CSSは変更なし) */
         * {
             margin: 0;
             padding: 0;
@@ -267,7 +270,6 @@
         .request-type-特 {
             color: #9575CD; background: #F3E5F5; border: 1px solid #B39DDB;
         }
-        /* ▼ 3つ追加 ▼ */
         .request-type-AM {
             color: #03A9F4; background: #E1F5FE; border: 1px solid #81D4FA;
         }
@@ -284,7 +286,6 @@
             background-color: #F0FAF9;
         }
 
-        /* ★ 修正 ★ 選択セルの色分けを上書き (より具体的に) */
         .calendar-day.selected-休 {
             border-color: #EF5350; background-color: #FFEBEE;
         }
@@ -300,7 +301,6 @@
         .calendar-day.selected-特 {
             border-color: #9575CD; background-color: #F3E5F5;
         }
-        /* ▼ 3つ追加 ▼ */
         .calendar-day.selected-AM {
             border-color: #03A9F4; background-color: #E1F5FE;
         }
@@ -351,7 +351,6 @@
         .request-button.active[data-type="特"] {
             background-color: #F3E5F5; border-color: #9575CD; color: #9575CD;
         }
-        /* ▼ 3つ追加 ▼ */
         .request-button.active[data-type="AM"] {
             background-color: #E1F5FE; border-color: #03A9F4; color: #03A9F4;
         }
@@ -629,6 +628,23 @@
 
         <button onclick="exportToCSV()" style="margin-top: 20px;">CSVエクスポート</button>
         
+        <div style="margin-top: 30px; padding: 20px; background: #FFFBF7; border: 1px solid #F0EAE4; border-radius: 8px;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #5D4037;">
+                <i class="fas fa-magic" style="color: #80CBC4;"></i>
+                勤務表 自動作成
+            </h3>
+            <p style="font-size: 13px; color: #777; margin-bottom: 15px;">
+                現在表示中の月（YYYY年MM月）の希望データを基に、勤務表の案を3パターン作成します。<br>
+                処理には数分かかる場合があります。
+            </p>
+            
+            <button id="generate-schedule-btn" style="background: #00897B; width: 100%;">
+                <i class="fas fa-magic"></i> 勤務表の作成を開始
+            </button>
+            
+            <div id="schedule-results" style="margin-top: 20px;">
+                </div>
+        </div>
         <div style="margin-top: 30px; padding: 20px; background: #F8F8F8; border: 1px solid #F0EAE4; border-radius: 8px; font-size: 13px; color: #777;">
             <h3 style="font-size: 16px; margin-bottom: 15px; color: #5D4037;">🔒 職員のパスワードリセット</h3>
             <p>
@@ -641,23 +657,7 @@
         <button onclick="showChangePasswordForm()" class="logout-button password-change-button">パスワードを変更する</button>
         <button onclick="logout()" class="logout-button">ログアウト</button>
     </div>
-    <div style="margin-top: 30px; padding: 20px; background: #FFFBF7; border: 1px solid #F0EAE4; border-radius: 8px;">
-    <h3 style="font-size: 16px; margin-bottom: 15px; color: #5D4037;">
-        <i class="fas fa-magic" style="color: #80CBC4;"></i>
-        勤務表 自動作成
-    </h3>
-    <p style="font-size: 13px; color: #777; margin-bottom: 15px;">
-        現在表示中の月（YYYY年MM月）の希望データを基に、勤務表の案を3パターン作成します。<br>
-        処理には数分かかる場合があります。
-    </p>
-    
-    <button id="generate-schedule-btn" class="btn-primary" style="background: #00897B; width: 100%;">
-        <i class="fas fa-magic"></i> 勤務表の作成を開始
-    </button>
-    
-    <div id="schedule-results" style="margin-top: 20px;">
-        </div>
-</div>
+
     <div id="syncStatus" class="sync-status hidden">
         <span id="syncText">オンライン</span>
     </div>
@@ -1118,7 +1118,6 @@
         try {
             const docRef = firestore.collection('requests').doc(monthKey);
             
-            // ★ 修正 ★ (updateで丸ごと置き換え)
             await docRef.update({
                 [staffUid]: data
             });
@@ -1192,7 +1191,6 @@
             
             await saveRequestsToFirebase(monthKey, currentUser.uid, data);
             
-            // ★ ポップアップ通知
             alert('希望が提出されました！');
             
             originalSelectedDates = JSON.parse(JSON.stringify(selectedDates));
@@ -1322,7 +1320,6 @@
                         case '出': cellStyle = 'background: #FFF8E1;'; break;
                         case '日': cellStyle = 'background: #E8F5E9;'; break;
                         case '特': cellStyle = 'background: #F3E5F5;'; break;
-                        /* ▼ 3つ追加 ▼ */
                         case 'AM': cellStyle = 'background: #E1F5FE;'; break;
                         case 'PM': cellStyle = 'background: #E8EAF6;'; break;
                         case '夏': cellStyle = 'background: #FFF3E0;'; break;
@@ -1423,7 +1420,7 @@
         }
     }
 
-window.addEventListener('DOMContentLoaded', async function() {
+    window.addEventListener('DOMContentLoaded', async function() {
         console.log('ページ読み込み完了');
         
         if (!initializeFirebase()) {
@@ -1456,16 +1453,13 @@ window.addEventListener('DOMContentLoaded', async function() {
             
             console.log('システム初期化完了');
 
-            /* ▼▼▼ このブロックが Cloud Function → GAS に変わります ▼▼▼ */
+            /* ▼▼▼ GAS 呼び出しのブロック ▼▼▼ */
             
-            // ---------------------------------
-            // 勤務表自動作成 (GAS 呼び出し)
-            // ---------------------------------
             const generateBtn = document.getElementById('generate-schedule-btn');
             const resultsArea = document.getElementById('schedule-results');
             
             // ★★★ ここに、GASデプロイ時にコピーした「Web アプリの URL」を貼り付け ★★★
-            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwRihiam4nc3w_3K8Uz6IPH0TYPrknLWWijfQSiBrFX4hll_MRnTzFKaNpILyjCrvJaRg/exec";
+            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwRihiam4nc3w_3K8Uz6IPH0TYPrknLWWijfQSiBrFX4hll_MRnTzFKaNpILyjCrvJaRg/exec"; // ★URLを確認
 
             generateBtn.addEventListener('click', async () => {
                 
@@ -1482,22 +1476,20 @@ window.addEventListener('DOMContentLoaded', async function() {
                 resultsArea.innerHTML = '<p style="color: #00897B;">サーバー(GAS)で計算を開始しました。結果が出るまで数分お待ちください...</p>';
 
                 try {
-                    // ★★★ 修正 ★★★
-                    // fetch のオプションから redirect: 'follow' を削除し、
-                    // mode: 'cors' を明記します。
-                    const response = await fetch(GAS_API_URL, {
+                    // ★ キャッシュ無効化URL
+                    const url = GAS_API_URL + "?v=" + new Date().getTime();
+
+                    const response = await fetch(url, {
                         method: 'POST',
-                        mode: 'cors', // ★ これを明記
+                        mode: 'cors', 
                         body: JSON.stringify({ month: monthKey }),
                         headers: {
                             'Content-Type': 'application/json'
                         }
-                        // redirect: 'follow' (← これを削除)
                     });
                     
                     if (!response.ok) {
-                        // fetchが成功しても、HTTPステータスが 4xx や 5xx の場合
-                        throw new Error(`サーバーからの応答エラー: ${response.statusText}`);
+                        throw new Error(`サーバーからの応答エラー: ${response.status} ${response.statusText}`);
                     }
                     
                     const result = await response.json();
@@ -1511,7 +1503,6 @@ window.addEventListener('DOMContentLoaded', async function() {
                     
                 } catch (error) {
                     console.error('勤務表の作成エラー:', error);
-                    // 'Failed to fetch' はここでキャッチされる
                     resultsArea.innerHTML = `<p class="error-message">エラーが発生しました: ${error.message}</p>`;
                 } finally {
                     generateBtn.disabled = false;
