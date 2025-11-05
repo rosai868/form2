@@ -281,6 +281,7 @@
             color: #FF9800; background: #FFF3E0; border: 1px solid #FFCC80;
         }
 
+
         .calendar-day.selected {
             border-color: #80CBC4; 
             background-color: #F0FAF9;
@@ -310,6 +311,7 @@
         .calendar-day.selected-夏 {
             border-color: #FF9800; background-color: #FFF3E0;
         }
+
 
         .request-buttons {
             display: grid;
@@ -359,6 +361,7 @@
         .request-button.active[data-type="夏"] {
             background-color: #FFF3E0; border-color: #FF9800; color: #FF9800;
         }
+
 
         .selected-dates {
             margin-top: 20px;
@@ -624,43 +627,11 @@
             </table>
         </div>
 
-        <!-- 管理者画面のどこかに追加 -->
-<button onclick="testGASConnection()" style="background: #FFA726; margin-top: 10px;">
-    GAS接続テスト
-</button>
-
-<script>
-async function testGASConnection() {
-    try {
-        const url = GAS_API_URL + "?v=" + new Date().getTime();
-        
-        // まずGETリクエストでテスト
-        const getResponse = await fetch(url);
-        const getData = await getResponse.json();
-        console.log("GET成功:", getData);
-        alert("GET接続成功: " + getData.message);
-        
-        // 次にPOSTリクエストでテスト
-        const postResponse = await fetch(url, {
-            method: 'POST',
-            mode: 'cors',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ month: "2024-11" })
-        });
-        
-        const postData = await postResponse.json();
-        console.log("POST成功:", postData);
-        alert("POST接続成功: " + postData.message);
-        
-    } catch (error) {
-        console.error("テストエラー:", error);
-        alert("接続エラー: " + error.message);
-    }
-}
-</script>
         <button onclick="exportToCSV()" style="margin-top: 20px;">CSVエクスポート</button>
+        
+        <button id="gasTestButton" style="background: #FFA726; margin-top: 10px;">
+            GAS接続テスト
+        </button>
         
         <div style="margin-top: 30px; padding: 20px; background: #FFFBF7; border: 1px solid #F0EAE4; border-radius: 8px;">
             <h3 style="font-size: 16px; margin-bottom: 15px; color: #5D4037;">
@@ -679,6 +650,7 @@ async function testGASConnection() {
             <div id="schedule-results" style="margin-top: 20px;">
                 </div>
         </div>
+        
         <div style="margin-top: 30px; padding: 20px; background: #F8F8F8; border: 1px solid #F0EAE4; border-radius: 8px; font-size: 13px; color: #777;">
             <h3 style="font-size: 16px; margin-bottom: 15px; color: #5D4037;">🔒 職員のパスワードリセット</h3>
             <p>
@@ -690,9 +662,7 @@ async function testGASConnection() {
         
         <button onclick="showChangePasswordForm()" class="logout-button password-change-button">パスワードを変更する</button>
         <button onclick="logout()" class="logout-button">ログアウト</button>
-    </div>
-
-    <div id="syncStatus" class="sync-status hidden">
+    </div> <div id="syncStatus" class="sync-status hidden">
         <span id="syncText">オンライン</span>
     </div>
     
@@ -717,7 +687,7 @@ async function testGASConnection() {
             auth = firebase.auth();
             firestore = firebase.firestore();
 
-            firestore.settings({ persistence: false }); // ★ キャッシュ無効化
+            firestore.settings({ persistence: false }); 
 
             db = firebase.database();
             console.log('Firebase初期化成功 (Auth, Firestore)');
@@ -743,7 +713,7 @@ async function testGASConnection() {
     let selectedDates = {};
     let selectedRequestType = null;
     
-    let originalSelectedDates = {}; // ★ ログアウト警告用
+    let originalSelectedDates = {}; 
     
     let staffListForAdmin = []; 
     let allRequestsForAdmin = {}; 
@@ -1454,6 +1424,9 @@ async function testGASConnection() {
         }
     }
 
+    // ★★★ この変数は、GASの呼び出しブロックの中で定義する必要があります ★★★
+    // const GAS_API_URL = "..."; 
+
     window.addEventListener('DOMContentLoaded', async function() {
         console.log('ページ読み込み完了');
         
@@ -1491,59 +1464,92 @@ async function testGASConnection() {
             
             const generateBtn = document.getElementById('generate-schedule-btn');
             const resultsArea = document.getElementById('schedule-results');
+            const testBtn = document.getElementById('gasTestButton'); // ★テストボタンを取得
             
             // ★★★ ここに、GASデプロイ時にコピーした「Web アプリの URL」を貼り付け ★★★
             const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwRihiam4nc3w_3K8Uz6IPH0TYPrknLWWijfQSiBrFX4hll_MRnTzFKaNpILyjCrvJaRg/exec"; // ★★★ 必ずあなたのURLに書き換えてください ★★★
 
-            generateBtn.addEventListener('click', async () => {
-                
-                const year = currentMonth.getFullYear();
-                const month = currentMonth.getMonth() + 1;
-                const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+            // ★ テスト関数を、GAS_API_URL を知っているこのスコープ内に定義
+            async function testGASConnection() {
+                alert("GAS接続テスト(POST)を開始します...");
+                try {
+                    const url = GAS_API_URL + "?v=" + new Date().getTime();
+                    
+                    // POSTリクエストでテスト
+                    const postResponse = await fetch(url, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ month: "2024-11" }) // テスト用の月
+                    });
+                    
+                      if (!postResponse.ok) throw new Error(`POSTエラー: ${postResponse.statusText}`);
+                    const postData = await postResponse.json();
+                    console.log("POST成功:", postData);
+                    alert("POST接続成功: " + postData.message);
+                    
+                } catch (error) {
+                    console.error("テストエラー:", error);
+                    alert("接続エラー: " + error.message);
+                }
+            }
+            
+            // ★ テストボタンにイベントリスナーを登録
+            if (testBtn) {
+                testBtn.addEventListener('click', testGASConnection);
+            }
+            
+            // ★ 本番の自動作成ボタン
+            generateBtn.addEventListener('click', async () => {
+                
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth() + 1;
+                const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
-                if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？\n処理には数分かかる場合があります。`)) {
-                    return;
-                }
+                if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？\n処理には数分かかる場合があります。`)) {
+                    return;
+                }
 
-                generateBtn.disabled = true;
-                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
-                resultsArea.innerHTML = '<p style="color: #00897B;">サーバー(GAS)で計算を開始しました。結果が出るまで数分お待ちください...</p>';
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
+                resultsArea.innerHTML = '<p style="color: #00897B;">サーバー(GAS)で計算を開始しました。結果が出るまで数分お待ちください...</p>';
 
-                try {
-                    // ★ キャッシュ無効化URL
-                    const url = GAS_API_URL + "?v=" + new Date().getTime();
+                try {
+                    const url = GAS_API_URL + "?v=" + new Date().getTime();
 
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        mode: 'cors', 
-                        body: JSON.stringify({ month: monthKey }),
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`サーバーからの応答エラー: ${response.status} ${response.statusText}`);
-                    }
-                    
-                    const result = await response.json();
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        mode: 'cors', 
+                        body: JSON.stringify({ month: monthKey }),
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`サーバーからの応答エラー: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
 
-                    if (!result.success) {
-                        throw new Error(result.message); // GAS側で起きたエラー
-                    }
+                    if (!result.success) {
+                        throw new Error(result.message); 
+                    }
 
-                    console.log(result);
-                    resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">${result.message}</p>`;
-                    
-                } catch (error) {
-                    console.error('勤務表の作成エラー:', error);
-                    resultsArea.innerHTML = `<p class="error-message">エラーが発生しました: ${error.message}</p>`;
-                } finally {
-                    generateBtn.disabled = false;
-                    generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
-                }
-            });
-            /* ▲▲▲ ここまで ▲▲▲ */
+                    console.log(result);
+                    resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">${result.message}</p>`;
+                    
+                } catch (error) {
+                    console.error('勤務表の作成エラー:', error);
+                    resultsArea.innerHTML = `<p class="error-message">エラーが発生しました: ${error.message}</p>`;
+                } finally {
+                    generateBtn.disabled = false;
+                    generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
+                }
+            });
+            /* ▲▲▲ ここまで ▲▲▲ */
 
         } catch (error) {
             console.error('初期化エラー:', error);
