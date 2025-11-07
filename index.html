@@ -497,6 +497,32 @@
         .sync-status.syncing {
             background: #FFA726;
         }
+
+        .schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 11px;
+}
+
+.schedule-table th,
+.schedule-table td {
+    border: 1px solid #E0E0E0;
+    padding: 4px;
+    text-align: center;
+}
+
+.schedule-table th {
+    background: #80CBC4;
+    color: white;
+    font-weight: 600;
+}
+
+.shift-day { background: #FFF9C4; }
+.shift-evening { background: #E1F5FE; }
+.shift-night { background: #E8EAF6; }
+.shift-rest { background: #F5F5F5; }
+.shift-special { background: #FCE4EC; }
     </style>
 </head>
 <body>
@@ -1496,13 +1522,13 @@
                 testBtn.addEventListener('click', testGASConnection);
             }
             
-            // ★ 本番の自動作成ボタン
-           generateBtn.addEventListener('click', async () => {
+// generateBtn.addEventListener部分を修正
+generateBtn.addEventListener('click', async () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
     const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
-    if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？`)) {
+    if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？\n処理には数分かかる場合があります。`)) {
         return;
     }
 
@@ -1511,13 +1537,13 @@
     resultsArea.innerHTML = '<p style="color: #00897B;">処理中...</p>';
 
     try {
-        // ★★★ GETリクエストに変更 ★★★
         const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
         
-        console.log("リクエストURL:", url);  // デバッグ用
+        console.log("リクエストURL:", url);
+        console.log("対象月:", monthKey);  // デバッグ用
         
         const response = await fetch(url, {
-            method: 'GET'  // GETメソッドを使用
+            method: 'GET'
         });
         
         if (!response.ok) {
@@ -1525,13 +1551,14 @@
         }
         
         const result = await response.json();
-        console.log("結果:", result);  // デバッグ用
+        console.log("結果:", result);
         
         if (!result.success) {
             throw new Error(result.message);
         }
 
-        resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">${result.message}</p>`;
+        // 結果を整形して表示
+        displayScheduleResults(result.message, monthKey);
         
     } catch (error) {
         console.error('エラー:', error);
@@ -1541,18 +1568,84 @@
         generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
     }
 });
-            /* ▲▲▲ ここまで ▲▲▲ */
 
-        } catch (error) {
-            console.error('初期化エラー:', error);
-            document.getElementById('loadingSection').innerHTML = 
-                '<div class="loading">' +
-                '<p style="color: red;">システムの初期化に失敗しました</p>' +
-                '<p style="font-size: 14px; margin-top: 10px;">管理者に連絡してください</p>' +
-                '<p style="font-size: 12px; margin-top: 10px; color: #666;">エラー: ' + error.message + '</p>' +
-                '</div>';
+// 結果表示関数を追加
+function displayScheduleResults(message, monthKey) {
+    // メッセージを表示
+    resultsArea.innerHTML = `
+        <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h4 style="color: #2E7D32; margin-bottom: 10px;">
+                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表生成完了
+            </h4>
+            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${message}</pre>
+        </div>
+        <div style="margin-top: 20px;">
+            <button onclick="viewScheduleDetails('${monthKey}')" style="background: #1976D2; margin-right: 10px;">
+                <i class="fas fa-table"></i> 詳細表示
+            </button>
+            <button onclick="downloadSchedule('${monthKey}')" style="background: #388E3C;">
+                <i class="fas fa-download"></i> ダウンロード
+            </button>
+        </div>
+    `;
+}
+
+// 詳細表示関数（仮実装）
+async function viewScheduleDetails(monthKey) {
+    try {
+        // Firestoreから結果を取得して表示
+        const doc = await firestore.collection('schedules').doc(monthKey).get();
+        if (doc.exists) {
+            const data = doc.data();
+            console.log("スケジュールデータ:", data);
+            
+            // ここに表形式での表示ロジックを実装
+            showScheduleTable(data);
         }
-    });
+    } catch (error) {
+        console.error("詳細取得エラー:", error);
+        alert("詳細の取得に失敗しました");
+    }
+}
+
+// スケジュール表を表示
+function showScheduleTable(scheduleData) {
+    // 新しいセクションを作成して表示
+    const tableHTML = `
+        <div style="margin-top: 30px; padding: 20px; background: white; border: 1px solid #E0E0E0; border-radius: 8px;">
+            <h3>勤務表詳細 - ${scheduleData.monthKey}</h3>
+            
+            <div style="margin-top: 20px;">
+                <h4>案1: ${scheduleData.draft1.type}</h4>
+                <div style="color: ${scheduleData.draft1.validation.isValid ? '#4CAF50' : '#f44336'};">
+                    ${scheduleData.draft1.validation.isValid ? '✓ 有効' : '✗ エラーあり'}
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <h4>案2: ${scheduleData.draft2.type}</h4>
+                <div style="color: ${scheduleData.draft2.validation.isValid ? '#4CAF50' : '#f44336'};">
+                    ${scheduleData.draft2.validation.isValid ? '✓ 有効' : '✗ エラーあり'}
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <h4>案3: ${scheduleData.draft3.type}</h4>
+                <div style="color: ${scheduleData.draft3.validation.isValid ? '#4CAF50' : '#f44336'};">
+                    ${scheduleData.draft3.validation.isValid ? '✓ 有効' : '✗ エラーあり'}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('schedule-results').innerHTML += tableHTML;
+}
+
+// ダウンロード関数（仮実装）
+function downloadSchedule(monthKey) {
+    alert(`${monthKey}の勤務表をダウンロード準備中...`);
+    // ここにCSVやExcelダウンロードロジックを実装
+}
     </script>
     
 </body>
