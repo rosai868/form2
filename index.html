@@ -1643,18 +1643,30 @@ function showScheduleTable(scheduleData) {
 
 // ダウンロード関数（仮実装）
 function downloadSchedule(monthKey) {
-    alert(`${monthKey}の勤務表をダウンロード準備中...`);
-    // ここにCSVやExcelダウンロードロジックを実装
+    alert(`${monthKey}の勤務表をダウンロード準備中...`);
+    // ここにCSVやExcelダウンロードロジックを実装
 }
-// ★★★ ここに修正を追加 ★★★
+
+// ★★★ ここからが修正箇所 ★★★
+
 // onclick="" から呼び出せるように、
 // 以下の2つの関数をグローバルスコープに登録します。
 window.viewScheduleDetails = viewScheduleDetails;
 window.downloadSchedule = downloadSchedule;
-// ★★★ 修正ここまで ★★★
 
-}); // <-- DOMContentLoaded がここで終わる
-        
+// ★★★ 構文エラーの修正 ★★★
+// DOMContentLoaded の try { に対応する catch ブロックを追加
+} catch (error) {
+    console.error('システム初期化中の重大なエラー:', error);
+    // エラーが発生した場合も、最低限ログイン画面は表示させる（試みる）
+    document.getElementById('loadingSection').classList.add('hidden');
+    document.getElementById('loginSection').classList.remove('hidden');
+    document.getElementById('loginError').textContent = 'システムの初期化中にエラーが発生しました。';
+}
+
+// ★★★ これが DOMContentLoaded の閉じ括弧です ★★★
+}); 
+
 </script>
 </body>
 </html>
