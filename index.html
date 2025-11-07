@@ -6,7 +6,6 @@
     <title>シフト希望管理システム (Firebase版)</title>
     
     <script src="firebase-config.js"></script>
-
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -16,513 +15,127 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        /* (CSS ★デザイン全面変更版★) */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: "Yu Gothic", YuGothic, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
-            background: #FFFBF7; 
-            padding: 20px;
-            color: #5D4037; 
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #ffffff;
-            border-radius: 12px; 
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
-            border: 1px solid #F0EAE4;
-        }
-
-        h1 {
-            text-align: center;
-            color: #5D4037;
-            margin-bottom: 30px;
-            font-size: 24px;
-            font-weight: 600;
-        }
-
-        h2 {
-            text-align: center;
-            color: #5D4037;
-            margin-bottom: 20px;
-            font-size: 20px;
-            font-weight: 500;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 50px;
-            font-size: 18px;
-            color: #777;
-        }
-
-        .login-container {
-            max-width: 400px;
-            margin: 50px auto;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #5D4037;
-            font-weight: 600;
-        }
-
-        input[type="text"],
-        input[type="password"],
-        select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #F0EAE4;
-            border-radius: 8px; 
-            font-size: 14px;
-            background: #FFFBF7;
-            color: #5D4037;
-        }
-
-        input:focus {
-            outline: none;
-            border-color: #80CBC4; 
-            box-shadow: 0 0 0 3px rgba(128, 203, 196, 0.2);
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background: #80CBC4; 
-            color: white;
-            border: none;
-            border-radius: 8px; 
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.2s;
-        }
-
-        button:hover {
-            background: #4DB6AC; 
-        }
-
-        button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .timer {
-            background: #F8F8F8;
-            border: 1px solid #F0EAE4;
-            color: #777;
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            text-align: right;
-            font-size: 12px;
-        }
-
-        .timer-display {
-            font-size: 14px;
-            font-weight: 600;
-            margin-top: 5px;
-            color: #5D4037;
-        }
-
-        .calendar-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #F8F8F8;
-            border-radius: 8px;
-        }
-
-        .calendar-header button {
-            width: auto;
-            padding: 8px 20px;
-            background: #B0BEC5; 
-        }
-
-        .calendar-header button:hover {
-            background: #90A4AE;
-        }
-
-        #calendar {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 1px; 
-            background: #E0E0E0;
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-            overflow: hidden; 
-        }
-
-        .weekday-header {
-            background: #00897B; 
-            color: white;
-            padding: 10px 5px;
-            text-align: center;
-            font-weight: 600;
-            font-size: 12px;
-        }
-
-        .weekday-header.sunday {
-            background: #E57373; 
-        }
-
-        .weekday-header.saturday {
-            background: #64B5F6; 
-        }
-
-        .calendar-day {
-            background: white;
-            height: 70px; 
-            display: flex;
-            flex-direction: column;
-            justify-content: center; 
-            align-items: center;     
-            cursor: pointer;
-            position: relative; 
-            user-select: none;
-            transition: background 0.2s;
-            border: 2px solid transparent;
-        }
-        .calendar-day.selected {
-             box-sizing: border-box; 
-        }
-
-        .calendar-day:hover:not(.disabled):not(.empty) {
-            background: #E0F2F1;
-        }
-
-        .calendar-day.empty {
-            background: #F4F7F6;
-            cursor: default;
-            border: none; 
-        }
-
-        .calendar-day.sunday {
-            background: #FFFBF7;
-        }
-
-        .calendar-day.saturday {
-            background: #F4F7FF;
-        }
-
-        .calendar-day.holiday {
-            background: #FFFBF7;
-        }
-
-        .calendar-day.disabled {
-            background: #F5F5F5;
-            color: #BDBDBD;
-            cursor: not-allowed;
-        }
+        /* (CSSは変更なし) */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Yu Gothic", YuGothic, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; background: #FFFBF7; padding: 20px; color: #5D4037; }
+        .container { max-width: 1200px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 30px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); border: 1px solid #F0EAE4; }
+        h1 { text-align: center; color: #5D4037; margin-bottom: 30px; font-size: 24px; font-weight: 600; }
+        h2 { text-align: center; color: #5D4037; margin-bottom: 20px; font-size: 20px; font-weight: 500; }
+        .hidden { display: none !important; }
+        .loading { text-align: center; padding: 50px; font-size: 18px; color: #777; }
+        .login-container { max-width: 400px; margin: 50px auto; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #5D4037; font-weight: 600; }
+        input[type="text"], input[type="password"], select { width: 100%; padding: 12px; border: 1px solid #F0EAE4; border-radius: 8px; font-size: 14px; background: #FFFBF7; color: #5D4037; }
+        input:focus { outline: none; border-color: #80CBC4; box-shadow: 0 0 0 3px rgba(128, 203, 196, 0.2); }
+        button { width: 100%; padding: 12px; background: #80CBC4; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #4DB6AC; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        .timer { background: #F8F8F8; border: 1px solid #F0EAE4; color: #777; padding: 12px; border-radius: 8px; margin-bottom: 15px; text-align: right; font-size: 12px; }
+        .timer-display { font-size: 14px; font-weight: 600; margin-top: 5px; color: #5D4037; }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: #F8F8F8; border-radius: 8px; }
+        .calendar-header button { width: auto; padding: 8px 20px; background: #B0BEC5; }
+        .calendar-header button:hover { background: #90A4AE; }
+        #calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: #E0E0E0; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden; }
+        .weekday-header { background: #00897B; color: white; padding: 10px 5px; text-align: center; font-weight: 600; font-size: 12px; }
+        .weekday-header.sunday { background: #E57373; }
+        .weekday-header.saturday { background: #64B5F6; }
+        .calendar-day { background: white; height: 70px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; position: relative; user-select: none; transition: background 0.2s; border: 2px solid transparent; }
+        .calendar-day.selected { box-sizing: border-box; }
+        .calendar-day:hover:not(.disabled):not(.empty) { background: #E0F2F1; }
+        .calendar-day.empty { background: #F4F7F6; cursor: default; border: none; }
+        .calendar-day.sunday { background: #FFFBF7; }
+        .calendar-day.saturday { background: #F4F7FF; }
+        .calendar-day.holiday { background: #FFFBF7; }
+        .calendar-day.disabled { background: #F5F5F5; color: #BDBDBD; cursor: not-allowed; }
+        .calendar-day-number { font-size: 15px; font-weight: 600; position: absolute; top: 5px; left: 8px; color: #777; }
+        .calendar-day-request { position: absolute; bottom: 5px; right: 5px; font-size: 11px; font-weight: 700; height: 22px; width: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .request-type-休 { color: #EF5350; background: #FFEBEE; border: 1px solid #FFCDD2; }
+        .request-type-年 { color: #42A5F5; background: #E3F2FD; border: 1px solid #BBDEFB; }
+        .request-type-出 { color: #FFA726; background: #FFF8E1; border: 1px solid #FFE0B2; }
+        .request-type-日 { color: #66BB6A; background: #E8F5E9; border: 1px solid #C8E6C9; }
+        .request-type-特 { color: #9575CD; background: #F3E5F5; border: 1px solid #B39DDB; }
+        .request-type-AM { color: #03A9F4; background: #E1F5FE; border: 1px solid #81D4FA; }
+        .request-type-PM { color: #3F51B5; background: #E8EAF6; border: 1px solid #9FA8DA; }
+        .request-type-夏 { color: #FF9800; background: #FFF3E0; border: 1px solid #FFCC80; }
+        .calendar-day.selected { border-color: #80CBC4; background-color: #F0FAF9; }
+        .calendar-day.selected-休 { border-color: #EF5350; background-color: #FFEBEE; }
+        .calendar-day.selected-年 { border-color: #42A5F5; background-color: #E3F2FD; }
+        .calendar-day.selected-出 { border-color: #FFA726; background-color: #FFF8E1; }
+        .calendar-day.selected-日 { border-color: #66BB6A; background-color: #E8F5E9; }
+        .calendar-day.selected-特 { border-color: #9575CD; background-color: #F3E5F5; }
+        .calendar-day.selected-AM { border-color: #03A9F4; background-color: #E1F5FE; }
+        .calendar-day.selected-PM { border-color: #3F51B5; background-color: #E8EAF6; }
+        .calendar-day.selected-夏 { border-color: #FF9800; background-color: #FFF3E0; }
+        .request-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 20px 0; }
+        .request-button { padding: 15px 10px; text-align: center; border: 2px solid #E0E0E0; border-radius: 8px; cursor: pointer; background: white; font-weight: 600; color: #5D4037; transition: all 0.2s; }
+        .request-button:hover:not(.active) { background: #F8F8F8; border-color: #BDBDBD; }
+        .request-button.active[data-type="休"] { background-color: #FFEBEE; border-color: #EF5350; color: #EF5350; }
+        .request-button.active[data-type="年"] { background-color: #E3F2FD; border-color: #42A5F5; color: #42A5F5; }
+        .request-button.active[data-type="出"] { background-color: #FFF8E1; border-color: #FFA726; color: #FFA726; }
+        .request-button.active[data-type="日"] { background-color: #E8F5E9; border-color: #66BB6A; color: #66BB6A; }
+        .request-button.active[data-type="特"] { background-color: #F3E5F5; border-color: #9575CD; color: #9575CD; }
+        .request-button.active[data-type="AM"] { background-color: #E1F5FE; border-color: #03A9F4; color: #03A9F4; }
+        .request-button.active[data-type="PM"] { background-color: #E8EAF6; border-color: #3F51B5; color: #3F51B5; }
+        .request-button.active[data-type="夏"] { background-color: #FFF3E0; border-color: #FF9800; color: #FF9800; }
+        .selected-dates { margin-top: 20px; padding: 15px; background: #F8F8F8; border-radius: 8px; border: 1px solid #F0EAE4; }
+        .selected-date-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin: 5px 0; background: white; border-radius: 6px; border: 1px solid #E0E0E0; }
+        .selected-date-item button { width: auto; padding: 5px 15px; background: #FFAB91; font-size: 12px; border-radius: 6px; }
+        .selected-date-item button:hover { background: #FF8A65; }
+        .error-message { color: #EF5350; margin-top: 10px; text-align: center; }
+        .success-message { color: #66BB6A; margin-top: 10px; text-align: center; }
+        .admin-table-container { overflow-x: auto; margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; }
+        .admin-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .admin-table th, .admin-table td { border: 1px solid #E0E0E0; padding: 8px 5px; text-align: center; }
+        .admin-table th { background: #80CBC4; color: white; font-weight: 600; position: sticky; top: 0; border-color: #80CBC4; }
+        .admin-table td:first-child { text-align: center; font-weight: bold; background: #F8F8F8; position: sticky; left: 0; min-width: 30px; }
+        .admin-table td:nth-child(2) { text-align: center; font-weight: bold; background: #F8F8F8; position: sticky; left: 30px; min-width: 35px; }
+        .admin-table td:nth-child(3) { text-align: left; padding-left: 10px; font-weight: bold; background: #F8F8F8; position: sticky; left: 65px; min-width: 75px; white-space: nowrap; }
+        .logout-button { background: #FFAB91; margin-top: 20px; }
+        .logout-button:hover { background: #FF8A65; }
+        .password-change-button { background: #FFD54F; color: #5D4037; margin-top: 10px; }
+        .password-change-button:hover { background: #FFCA28; }
+        .sync-status { position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background: #66BB6A; color: white; border-radius: 20px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .sync-status.offline { background: #EF5350; }
+        .sync-status.syncing { background: #FFA726; }
         
-        .calendar-day-number {
-            font-size: 15px; 
-            font-weight: 600;
-            position: absolute; 
-            top: 5px;
-            left: 8px;
-            color: #777; 
-        }
-
-        .calendar-day-request {
-            position: absolute;
-            bottom: 5px; 
-            right: 5px;   
-            font-size: 11px;
-            font-weight: 700;
-            height: 22px;
-            width: 22px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .request-type-休 {
-            color: #EF5350; background: #FFEBEE; border: 1px solid #FFCDD2;
-        }
-        .request-type-年 {
-            color: #42A5F5; background: #E3F2FD; border: 1px solid #BBDEFB;
-        }
-        .request-type-出 {
-            color: #FFA726; background: #FFF8E1; border: 1px solid #FFE0B2;
-        }
-        .request-type-日 {
-            color: #66BB6A; background: #E8F5E9; border: 1px solid #C8E6C9;
-        }
-        .request-type-特 {
-            color: #9575CD; background: #F3E5F5; border: 1px solid #B39DDB;
-        }
-        .request-type-AM {
-            color: #03A9F4; background: #E1F5FE; border: 1px solid #81D4FA;
-        }
-        .request-type-PM {
-            color: #3F51B5; background: #E8EAF6; border: 1px solid #9FA8DA;
-        }
-        .request-type-夏 {
-            color: #FF9800; background: #FFF3E0; border: 1px solid #FFCC80;
-        }
-
-
-        .calendar-day.selected {
-            border-color: #80CBC4; 
-            background-color: #F0FAF9;
-        }
-
-        .calendar-day.selected-休 {
-            border-color: #EF5350; background-color: #FFEBEE;
-        }
-        .calendar-day.selected-年 {
-            border-color: #42A5F5; background-color: #E3F2FD;
-        }
-        .calendar-day.selected-出 {
-            border-color: #FFA726; background-color: #FFF8E1;
-        }
-        .calendar-day.selected-日 {
-            border-color: #66BB6A; background-color: #E8F5E9;
-        }
-        .calendar-day.selected-特 {
-            border-color: #9575CD; background-color: #F3E5F5;
-        }
-        .calendar-day.selected-AM {
-            border-color: #03A9F4; background-color: #E1F5FE;
-        }
-        .calendar-day.selected-PM {
-            border-color: #3F51B5; background-color: #E8EAF6;
-        }
-        .calendar-day.selected-夏 {
-            border-color: #FF9800; background-color: #FFF3E0;
-        }
-
-
-        .request-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 10px;
-            margin: 20px 0;
-        }
-
-        .request-button {
-            padding: 15px 10px;
-            text-align: center;
-            border: 2px solid #E0E0E0;
-            border-radius: 8px; 
-            cursor: pointer;
-            background: white;
-            font-weight: 600;
-            color: #5D4037;
-            transition: all 0.2s;
-        }
-
-        .request-button:hover:not(.active) {
-            background: #F8F8F8;
-            border-color: #BDBDBD;
-        }
-        
-        .request-button.active[data-type="休"] {
-            background-color: #FFEBEE; border-color: #EF5350; color: #EF5350;
-        }
-        .request-button.active[data-type="年"] {
-            background-color: #E3F2FD; border-color: #42A5F5; color: #42A5F5;
-        }
-        .request-button.active[data-type="出"] {
-            background-color: #FFF8E1; border-color: #FFA726; color: #FFA726;
-        }
-        .request-button.active[data-type="日"] {
-            background-color: #E8F5E9; border-color: #66BB6A; color: #66BB6A;
-        }
-        .request-button.active[data-type="特"] {
-            background-color: #F3E5F5; border-color: #9575CD; color: #9575CD;
-        }
-        .request-button.active[data-type="AM"] {
-            background-color: #E1F5FE; border-color: #03A9F4; color: #03A9F4;
-        }
-        .request-button.active[data-type="PM"] {
-            background-color: #E8EAF6; border-color: #3F51B5; color: #3F51B5;
-        }
-        .request-button.active[data-type="夏"] {
-            background-color: #FFF3E0; border-color: #FF9800; color: #FF9800;
-        }
-
-
-        .selected-dates {
-            margin-top: 20px;
-            padding: 15px;
-            background: #F8F8F8;
-            border-radius: 8px;
-            border: 1px solid #F0EAE4;
-        }
-
-        .selected-date-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            margin: 5px 0;
-            background: white;
-            border-radius: 6px;
-            border: 1px solid #E0E0E0;
-        }
-        
-        .selected-date-item button {
-            width: auto;
-            padding: 5px 15px;
-            background: #FFAB91; 
-            font-size: 12px;
-            border-radius: 6px;
-        }
-        .selected-date-item button:hover {
-            background: #FF8A65;
-        }
-
-        .error-message {
-            color: #EF5350; 
-            margin-top: 10px;
-            text-align: center;
-        }
-
-        .success-message {
-            color: #66BB6A; 
-            margin-top: 10px;
-            text-align: center;
-        }
-
-        .admin-table-container {
-            overflow-x: auto;
-            margin-top: 20px;
-            border: 1px solid #E0E0E0;
-            border-radius: 8px;
-        }
-
-        .admin-table {
+        /* ★ 勤務表案のテーブルCSSを追加 ★ */
+        .schedule-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 12px;
+            margin-top: 20px;
+            font-size: 11px;
+            table-layout: fixed; /* テーブル幅を固定 */
         }
-
-        .admin-table th, .admin-table td {
+        .schedule-table th,
+        .schedule-table td {
             border: 1px solid #E0E0E0;
-            padding: 8px 5px; 
+            padding: 4px;
             text-align: center;
+            width: 2.8%; /* (100% - 10% for name) / 31 days */
         }
-
-        .admin-table th {
-            background: #80CBC4; 
-            color: white;
+        .schedule-table th:first-child,
+        .schedule-table td:first-child {
+            width: 10%; /* 名前列 */
+            text-align: left;
+            padding-left: 5px;
             font-weight: 600;
-            position: sticky;
-            top: 0;
-            border-color: #80CBC4;
-        }
-
-        .admin-table td:first-child {
-            text-align: center;
-            font-weight: bold;
             background: #F8F8F8;
             position: sticky;
             left: 0;
-            min-width: 30px;
         }
-        .admin-table td:nth-child(2) {
-            text-align: center;
-            font-weight: bold;
-            background: #F8F8F8;
-            position: sticky;
-            left: 30px;
-            min-width: 35px;
-        }
-        .admin-table td:nth-child(3) {
-            text-align: left;
-            padding-left: 10px;
-            font-weight: bold;
-            background: #F8F8F8;
-            position: sticky;
-            left: 65px;
-            min-width: 75px;
-            white-space: nowrap;
-        }
-
-        .logout-button {
-            background: #FFAB91; 
-            margin-top: 20px;
-        }
-
-        .logout-button:hover {
-            background: #FF8A65;
-        }
-        
-        .password-change-button {
-            background: #FFD54F; 
-            color: #5D4037;
-            margin-top: 10px;
-        }
-        .password-change-button:hover {
-            background: #FFCA28;
-        }
-
-        .sync-status {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 10px 20px;
-            background: #66BB6A;
+        .schedule-table th {
+            background: #80CBC4;
             color: white;
-            border-radius: 20px;
-            font-size: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            font-weight: 600;
+        }
+        .shift-日 { background: #E8F5E9; color: #388E3C; }
+        .shift-準 { background: #E1F5FE; color: #0277BD; }
+        .shift-夜 { background: #E8EAF6; color: #303F9F; }
+        .shift-休, .shift-年, .shift-特, .shift-夏, .shift-AM, .shift-PM { 
+            background: #F5F5F5; color: #757575; 
         }
 
-        .sync-status.offline {
-            background: #EF5350;
-        }
-
-        .sync-status.syncing {
-            background: #FFA726;
-        }
-
-        .schedule-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    font-size: 11px;
-}
-
-.schedule-table th,
-.schedule-table td {
-    border: 1px solid #E0E0E0;
-    padding: 4px;
-    text-align: center;
-}
-
-.schedule-table th {
-    background: #80CBC4;
-    color: white;
-    font-weight: 600;
-}
-
-.shift-day { background: #FFF9C4; }
-.shift-evening { background: #E1F5FE; }
-.shift-night { background: #E8EAF6; }
-.shift-rest { background: #F5F5F5; }
-.shift-special { background: #FCE4EC; }
     </style>
 </head>
 <body>
@@ -674,7 +287,7 @@
             </button>
             
             <div id="schedule-results" style="margin-top: 20px;">
-                </div>
+            </div>
         </div>
         
         <div style="margin-top: 30px; padding: 20px; background: #F8F8F8; border: 1px solid #F0EAE4; border-radius: 8px; font-size: 13px; color: #777;">
@@ -688,7 +301,9 @@
         
         <button onclick="showChangePasswordForm()" class="logout-button password-change-button">パスワードを変更する</button>
         <button onclick="logout()" class="logout-button">ログアウト</button>
-    </div> <div id="syncStatus" class="sync-status hidden">
+    </div> 
+
+    <div id="syncStatus" class="sync-status hidden">
         <span id="syncText">オンライン</span>
     </div>
     
@@ -713,7 +328,7 @@
             auth = firebase.auth();
             firestore = firebase.firestore();
 
-            firestore.settings({ persistence: false }); 
+            firestore.settings({ persistence: false }); // ★ キャッシュ無効化
 
             db = firebase.database();
             console.log('Firebase初期化成功 (Auth, Firestore)');
@@ -739,7 +354,7 @@
     let selectedDates = {};
     let selectedRequestType = null;
     
-    let originalSelectedDates = {}; 
+    let originalSelectedDates = {}; // ★ ログアウト警告用
     
     let staffListForAdmin = []; 
     let allRequestsForAdmin = {}; 
@@ -1419,6 +1034,91 @@
     }
 
     // ============================================
+    // ★ 新機能： スケジュール案の表示
+    // ============================================
+    
+    // スケジュール案（3つ）を表示する
+    function displayScheduleResults(resultData, monthKey) {
+        const resultsArea = document.getElementById('schedule-results');
+        
+        resultsArea.innerHTML = `
+            <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h4 style="color: #2E7D32; margin-bottom: 10px;">
+                    <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が3件 生成されました
+                </h4>
+                <p style="font-size: 13px; color: #555;">${resultData.message.replace(/\n/g, '<br>')}</p>
+            </div>
+        `;
+
+        // 3つの案をそれぞれ表示
+        ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
+            const draft = resultData[draftKey];
+            if (!draft) return;
+            
+            const validationStatus = draft.validation.isValid 
+                ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
+                : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
+            
+            const draftDiv = document.createElement('div');
+            draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+            
+            draftDiv.innerHTML = `
+                <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type}</h4>
+                    <div>${validationStatus}</div>
+                </div>
+                <div style="padding: 15px; overflow-x: auto;">
+                    ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
+                    <button onclick="confirmSchedule('${draftKey}')" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                        <i class="fas fa-check"></i> この案で確定する
+                    </button>
+                </div>
+            `;
+            resultsArea.appendChild(draftDiv);
+        });
+    }
+
+    // 案のテーブルHTMLを生成
+    function generateScheduleTableHTML(schedule, monthKey, staff) {
+        const [year, month] = monthKey.split("-").map(Number);
+        const daysInMonth = new Date(year, month, 0).getDate();
+        
+        let header = '<tr><th>職員名</th>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            header += `<th>${d}</th>`;
+        }
+        header += '</tr>';
+
+        let body = '';
+        // staffListForAdmin (ID順ソート済み) を使う
+        staff.forEach(staffMember => {
+            if (staffMember.originalId === 31) return; // Admin除外
+            
+            const staffSchedule = schedule[staffMember.uid];
+            if (!staffSchedule) return; // スケジュールがない（？）
+
+            body += `<tr><td>${staffMember.name}</td>`;
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+                const shift = staffSchedule.shifts[dateStr] || '休';
+                body += `<td class="shift-${shift}">${shift}</td>`;
+            }
+            body += '</tr>';
+        });
+
+        return `<table class="schedule-table">${header}${body}</table>`;
+    }
+
+    // 勤務表の確定（仮）
+    function confirmSchedule(draftKey) {
+        if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
+            return;
+        }
+        // TODO: 確定した案を 'finalSchedule' コレクションに保存するロジック
+        alert(`${draftKey} が確定されました。（機能は開発中です）`);
+    }
+
+    // ============================================
     // 初期化処理
     // ============================================
     
@@ -1449,9 +1149,6 @@
             console.warn("Realtime Database が無効なため、オンライン状態が取得できません。");
         }
     }
-
-    // ★★★ この変数は、GASの呼び出しブロックの中で定義する必要があります ★★★
-    // const GAS_API_URL = "..."; 
 
     window.addEventListener('DOMContentLoaded', async function() {
         console.log('ページ読み込み完了');
@@ -1486,187 +1183,173 @@
             
             console.log('システム初期化完了');
 
-            /* ▼▼▼ GAS 呼び出しのブロック ▼▼▼ */
+            /* ▼▼▼ GAS 呼び出しのブロック (★ 修正 ★) ▼▼▼ */
             
             const generateBtn = document.getElementById('generate-schedule-btn');
             const resultsArea = document.getElementById('schedule-results');
-            const testBtn = document.getElementById('gasTestButton'); // ★テストボタンを取得
+            const testBtn = document.getElementById('gasTestButton'); 
             
-            // ★★★ ここに、GASデプロイ時にコピーした「Web アプリの URL」を貼り付け ★★★
-            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzDCNSNc4lBbAPekNyOMvmADQGg3jeSivHLcB0UVnmWF7tbOmP3qYD0OuVyCkm0-dIeQA/exec"; // ★★★ 必ずあなたのURLに書き換えてください ★★★
+            // ★★★ ここはあなたのGASのURLに書き換えてください ★★★
+            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwRihiam4nc3w_3K8Uz6IPH0TYPrknLWWijfQSiBrFX4hll_MRnTzFKaNpILyjCrvJaRg/exec"; 
 
-            // ★ テスト関数を、GAS_API_URL を知っているこのスコープ内に定義
+            // ★ テスト関数 (GAS_API_URL を参照できるように、このスコープ内に定義)
             async function testGASConnection() {
-                alert("GAS接続テストを開始します...");
-                try {
-                    // GETでテスト
-                    const url = `${GAS_API_URL}?action=create&month=2024-11&v=${new Date().getTime()}`;
-                    
-                    const response = await fetch(url, {
-                        method: 'GET'
-                    });
-                    
-                    if (!response.ok) throw new Error(`エラー: ${response.statusText}`);
-                    const data = await response.json();
-                    console.log("成功:", data);
-                    alert("接続成功: " + data.message);
-                    
-                } catch (error) {
-                    console.error("テストエラー:", error);
-                    alert("接続エラー: " + error.message);
-                }
+                alert("GAS接続テスト(GET)を開始します...");
+                const resultsArea = document.getElementById('schedule-results');
+                resultsArea.innerHTML = '<p style="color: #00897B;">GASに接続テスト中...</p>';
+                try {
+                    const url = GAS_API_URL + "?v=" + new Date().getTime();
+                    
+                    const response = await fetch(url, { method: 'GET' });
+                    
+                    if (!response.ok) throw new Error(`GETエラー: ${response.statusText}`);
+                    const data = await response.json();
+                    console.log("GET成功:", data);
+                    alert("GET接続成功: " + data.message);
+                    resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">GET接続成功: ${data.message}</p>`;
+                    
+                } catch (error) {
+                    console.error("テストエラー:", error);
+                    alert("接続エラー: " + error.message);
+                    resultsArea.innerHTML = `<p class="error-message">接続エラー: ${error.message}</p>`;
+                }
             }
             
-            // ★ テストボタンにイベントリスナーを登録
             if (testBtn) {
                 testBtn.addEventListener('click', testGASConnection);
             }
             
-// generateBtn.addEventListener部分を修正
-generateBtn.addEventListener('click', async () => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth() + 1;
-    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+            // ★ 本番の自動作成ボタン
+            generateBtn.addEventListener('click', async () => {
+                
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth() + 1;
+                const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
-    if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？\n処理には数分かかる場合があります。`)) {
-        return;
-    }
+                if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？\n処理には数分かかる場合があります。`)) {
+                    return;
+                }
 
-    generateBtn.disabled = true;
-    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
-    resultsArea.innerHTML = '<p style="color: #00897B;">処理中...</p>';
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
+                resultsArea.innerHTML = '<p style="color: #00897B;">サーバー(GAS)で計算を開始しました。結果が出るまで数分お待ちください...</p>';
 
-    try {
-        const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
-        
-        console.log("リクエストURL:", url);
-        console.log("対象月:", monthKey);  // デバッグ用
-        
-        const response = await fetch(url, {
-            method: 'GET'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`エラー: ${response.status}`);
+                try {
+                    // ★ 修正: GETメソッドで action=create と month を送信
+                    const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
+
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`サーバーからの応答エラー: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        throw new Error(result.message); 
+                    }
+
+                    console.log("GASからの結果:", result);
+                      
+                      // ★ 修正 ★ (結果表示関数を呼び出す)
+                      // (GASが `message` に文字列を返すことを期待)
+                      displayScheduleResults(result.message, monthKey);
+                    
+                } catch (error) {
+                    console.error('勤務表の作成エラー:', error);
+                    resultsArea.innerHTML = `<p class="error-message">エラーが発生しました: ${error.message}</p>`;
+                } finally {
+                    generateBtn.disabled = false;
+                    generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
+                }
+            });
+            
+            /* ★ 修正 ★ 
+               HTMLのonclick=""から呼び出される関数を
+               グローバルスコープ(window)に登録
+            */
+            window.viewScheduleDetails = async (monthKey) => {
+                 try {
+                    resultsArea.innerHTML += '<p style="color: #00897B;">詳細データをFirestoreから取得中...</p>';
+                    const doc = await firestore.collection('schedules').doc(monthKey).get({ source: 'server' });
+                    
+                    if (doc.exists) {
+                        const data = doc.data();
+                        console.log("スケジュールデータ:", data);
+                        showScheduleTable(data);
+                    } else {
+                        alert("詳細データが見つかりません。");
+                    }
+                } catch (error) {
+                    console.error("詳細取得エラー:", error);
+                    alert("詳細の取得に失敗しました: " + error.message);
+                }
+            };
+
+            window.downloadSchedule = (monthKey) => {
+                alert(`${monthKey}の勤務表をダウンロード準備中... (この機能は未実装です)`);
+                // TODO: CSVダウンロードロジックを実装
+            };
+            
+            // スケジュール表を表示する関数
+            function showScheduleTable(scheduleData) {
+                const resultsArea = document.getElementById('schedule-results');
+                // 既存のメッセージをクリアし、テーブルを追加
+                resultsArea.innerHTML = `
+                    <div style="margin-top: 20px; padding: 20px; background: white; border: 1px solid #E0E0E0; border-radius: 8px;">
+                        <h3>勤務表詳細 - ${scheduleData.monthKey}</h3>
+                `;
+
+                ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
+                    const draft = scheduleData[draftKey];
+                    if (!draft) return;
+                    
+                    const validationStatus = draft.validation.isValid 
+                        ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
+                        : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
+
+                    resultsArea.innerHTML += `
+                        <div style="margin-top: 20px;">
+                            <h4 style="display:inline-block; margin-right: 15px;">案 ${index + 1}: ${draft.type}</h4>
+                            <div style="display:inline-block;">${validationStatus}</div>
+                            <div style="overflow-x: auto;">
+                                ${generateScheduleTableHTML(draft.schedule, scheduleData.monthKey, staffListForAdmin)}
+                            </div>
+                            <button onclick="confirmSchedule('${draftKey}')" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                                <i class="fas fa-check"></i> この案で確定する
+                            </button>
+                        </div>
+                    `;
+                });
+                
+                resultsArea.innerHTML += '</div>';
+            }
+            
+            // 確定ボタン（グローバルスコープに登録）
+            window.confirmSchedule = (draftKey) => {
+                if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
+                    return;
+                }
+                alert(`${draftKey} が確定されました。（機能は開発中です）`);
+            };
+
+            /* ▲▲▲ ここまで ▲▲▲ */
+
+        } catch (error) {
+            console.error('初期化エラー:', error);
+            document.getElementById('loadingSection').innerHTML = 
+                '<div class="loading">' +
+                '<p style="color: red;">システムの初期化に失敗しました</p>' +
+                '<p style="font-size: 14px; margin-top: 10px;">管理者に連絡してください</p>' +
+                '<p style="font-size: 12px; margin-top: 10px; color: #666;">エラー: ' + error.message + '</p>' +
+                '</div>';
         }
-        
-        const result = await response.json();
-        console.log("結果:", result);
-        
-        if (!result.success) {
-            throw new Error(result.message);
-        }
-
-        // 結果を整形して表示
-        displayScheduleResults(result.message, monthKey);
-        
-    } catch (error) {
-        console.error('エラー:', error);
-        resultsArea.innerHTML = `<p class="error-message">エラー: ${error.message}</p>`;
-    } finally {
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
-    }
-});
-
-// 結果表示関数を追加
-function displayScheduleResults(message, monthKey) {
-    // メッセージを表示
-    resultsArea.innerHTML = `
-        <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <h4 style="color: #2E7D32; margin-bottom: 10px;">
-                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表生成完了
-            </h4>
-            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${message}</pre>
-        </div>
-        <div style="margin-top: 20px;">
-            <button onclick="viewScheduleDetails('${monthKey}')" style="background: #1976D2; margin-right: 10px;">
-                <i class="fas fa-table"></i> 詳細表示
-            </button>
-            <button onclick="downloadSchedule('${monthKey}')" style="background: #388E3C;">
-                <i class="fas fa-download"></i> ダウンロード
-            </button>
-        </div>
-    `;
-}
-
-// 詳細表示関数（仮実装）
-async function viewScheduleDetails(monthKey) {
-    try {
-        // Firestoreから結果を取得して表示
-        const doc = await firestore.collection('schedules').doc(monthKey).get();
-        if (doc.exists) {
-            const data = doc.data();
-            console.log("スケジュールデータ:", data);
-            
-            // ここに表形式での表示ロジックを実装
-            showScheduleTable(data);
-        }
-    } catch (error) {
-        console.error("詳細取得エラー:", error);
-        alert("詳細の取得に失敗しました");
-    }
-}
-
-// スケジュール表を表示
-function showScheduleTable(scheduleData) {
-    // 新しいセクションを作成して表示
-    const tableHTML = `
-        <div style="margin-top: 30px; padding: 20px; background: white; border: 1px solid #E0E0E0; border-radius: 8px;">
-            <h3>勤務表詳細 - ${scheduleData.monthKey}</h3>
-            
-            <div style="margin-top: 20px;">
-                <h4>案1: ${scheduleData.draft1.type}</h4>
-                <div style="color: ${scheduleData.draft1.validation.isValid ? '#4CAF50' : '#f44336'};">
-                    ${scheduleData.draft1.validation.isValid ? '✓ 有効' : '✗ エラーあり'}
-                </div>
-            </div>
-            
-            <div style="margin-top: 20px;">
-                <h4>案2: ${scheduleData.draft2.type}</h4>
-                <div style="color: ${scheduleData.draft2.validation.isValid ? '#4CAF50' : '#f44336'};">
-                    ${scheduleData.draft2.validation.isValid ? '✓ 有効' : '✗ エラーあり'}
-                </div>
-            </div>
-            
-            <div style="margin-top: 20px;">
-                <h4>案3: ${scheduleData.draft3.type}</h4>
-                <div style="color: ${scheduleData.draft3.validation.isValid ? '#4CAF50' : '#f44336'};">
-                    ${scheduleData.draft3.validation.isValid ? '✓ 有効' : '✗ エラーあり'}
-                </div>
-            </div>
-        </div>
-    `;
+    });
+    </script>
     
-    document.getElementById('schedule-results').innerHTML += tableHTML;
-}
-
-// ダウンロード関数（仮実装）
-function downloadSchedule(monthKey) {
-    alert(`${monthKey}の勤務表をダウンロード準備中...`);
-    // ここにCSVやExcelダウンロードロジックを実装
-}
-
-// ★★★ ここからが修正箇所 ★★★
-
-// onclick="" から呼び出せるように、
-// 以下の2つの関数をグローバルスコープに登録します。
-window.viewScheduleDetails = viewScheduleDetails;
-window.downloadSchedule = downloadSchedule;
-
-// ★★★ 構文エラーの修正 ★★★
-// DOMContentLoaded の try { に対応する catch ブロックを追加
-} catch (error) {
-    console.error('システム初期化中の重大なエラー:', error);
-    // エラーが発生した場合も、最低限ログイン画面は表示させる（試みる）
-    document.getElementById('loadingSection').classList.add('hidden');
-    document.getElementById('loginSection').classList.remove('hidden');
-    document.getElementById('loginError').textContent = 'システムの初期化中にエラーが発生しました。';
-}
-
-// ★★★ これが DOMContentLoaded の閉じ括弧です ★★★
-}); 
-
-</script>
 </body>
 </html>
