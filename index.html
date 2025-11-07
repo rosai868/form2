@@ -134,7 +134,6 @@
         .shift-休, .shift-年, .shift-特, .shift-夏, .shift-AM, .shift-PM { 
             background: #F5F5F5; color: #757575; 
         }
-
     </style>
 </head>
 <body>
@@ -300,10 +299,8 @@
         
         <button onclick="showChangePasswordForm()" class="logout-button password-change-button">パスワードを変更する</button>
         <button onclick="logout()" class="logout-button">ログアウト</button>
-    </div> <div id="syncStatus" class="sync-status hidden">
-        <span id="syncText">オンライン</span>
-    </div>
-    
+    </div> 
+
     <script>
     // ============================================
     // Firebaseの設定
@@ -327,7 +324,7 @@
 
             firestore.settings({ persistence: false }); // ★ キャッシュ無効化
 
-            db = firebase.database();
+            // db = firebase.database(); // ★ 修正 ★ (フリーズ原因のため無効化)
             console.log('Firebase初期化成功 (Auth, Firestore)');
             return true;
         } catch (error) {
@@ -500,7 +497,7 @@
         document.getElementById('mainSection').classList.add('hidden');
         document.getElementById('adminSection').classList.add('hidden');
         document.getElementById('changePasswordSection').classList.add('hidden');
-        // document.getElementById('syncStatus').classList.add('hidden'); // ★ 修正 ★ (機能無効化)
+        // document.getElementById('syncStatus').classList.add('hidden'); // ★ 修正 ★
     }
 
 
@@ -518,7 +515,7 @@
         document.getElementById('changePasswordSection').classList.add('hidden');
         document.getElementById('adminSection').classList.add('hidden');
         document.getElementById('mainSection').classList.remove('hidden');
-        // document.getElementById('syncStatus').classList.remove('hidden'); // ★ 修正 ★ (機能無効化)
+        // document.getElementById('syncStatus').classList.remove('hidden'); // ★ 修正 ★
         
         document.getElementById('welcomeMessage').textContent = currentUser.name + 'さん、お疲れ様です！';
 
@@ -541,7 +538,7 @@
         document.getElementById('loginSection').classList.add('hidden');
         document.getElementById('mainSection').classList.add('hidden');
         document.getElementById('adminSection').classList.remove('hidden');
-        // document.getElementById('syncStatus').classList.remove('hidden'); // ★ 修正 ★ (機能無効化)
+        // document.getElementById('syncStatus').classList.remove('hidden'); // ★ 修正 ★
         
         currentMonth = new Date();
         
@@ -1034,103 +1031,21 @@
     // ★ 新機能： スケジュール案の表示
     // ============================================
     
-    // スケジュール案（3つ）を表示する
-    function displayScheduleResults(resultData, monthKey) {
-        const resultsArea = document.getElementById('schedule-results');
-        
-        resultsArea.innerHTML = `
-            <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <h4 style="color: #2E7D32; margin-bottom: 10px;">
-                    <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が3件 生成されました
-                </h4>
-                <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 13px; color: #555;">${resultData.message.replace(/\n/g, '<br>')}</pre>
-            </div>
-        `;
-
-        ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
-            const draft = resultData.data[draftKey]; 
-            if (!draft) return;
-            
-            const validationStatus = draft.validation.isValid 
-                ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
-                : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
-            
-            const draftDiv = document.createElement('div');
-            draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
-            
-            draftDiv.innerHTML = `
-                <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
-                    <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type}</h4>
-                    <div>${validationStatus}</div>
-                </div>
-                <div style="padding: 15px; overflow-x: auto;">
-                    ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
-                    <button onclick="confirmSchedule('${draftKey}')" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-                        <i class="fas fa-check"></i> この案で確定する
-                    </button>
-                </div>
-            `;
-            resultsArea.appendChild(draftDiv);
-        });
-    }
-
-    // 案のテーブルHTMLを生成
-    function generateScheduleTableHTML(schedule, monthKey, staff) {
-        const [year, month] = monthKey.split("-").map(Number);
-        const daysInMonth = new Date(year, month, 0).getDate();
-        
-        let header = '<tr><th>職員名</th>';
-        for (let d = 1; d <= daysInMonth; d++) {
-            header += `<th>${d}</th>`;
-        }
-        header += '</tr>';
-
-        let body = '';
-        staff.forEach(staffMember => {
-            if (staffMember.originalId === 31) return; // Admin除外
-            
-            const staffSchedule = schedule[staffMember.uid];
-            if (!staffSchedule) {
-                console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
-                return; 
-            }
-
-            body += `<tr><td>${staffMember.name}</td>`;
-            for (let d = 1; d <= daysInMonth; d++) {
-                const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
-                const shift = staffSchedule.shifts[dateStr] || '休'; // フォールバック
-                body += `<td class="shift-${shift}">${shift}</td>`;
-            }
-            body += '</tr>';
-        });
-
-        return `<table class="schedule-table">${header}${body}</table>`;
-    }
-
-    // 勤務表の確定（仮）
-    function confirmSchedule(draftKey) {
-        if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
-            return;
-        }
-        alert(`${draftKey} が確定されました。（機能は開発中です）`);
-    }
-
+    // (★ 修正 ★ これらの関数は DOMContentLoaded の中で定義します)
+    
     // ============================================
     // 初期化処理
     // ============================================
     
     function updateSyncStatus(status) {
         // (★ 修正 ★ 機能無効化)
-        // const statusElement = document.getElementById('syncStatus');
-        // const textElement = document.getElementById('syncText');
-        // ...
     }
 
     function setupRealtimeSync() {
         // (★ 修正 ★ 機能無効化)
-        // try { ... } catch (e) { ... }
     }
 
+    // ★ 修正 ★ DOMContentLoaded の中身を整理
     window.addEventListener('DOMContentLoaded', async function() {
         console.log('ページ読み込み完了');
         
@@ -1144,7 +1059,7 @@
         }
         
         try {
-            // setupRealtimeSync(); // ★ 修正 ★ (機能無効化)
+            // setupRealtimeSync(); // (無効化)
             
             document.getElementById('loadingSection').classList.add('hidden');
             document.getElementById('loginSection').classList.remove('hidden');
@@ -1164,7 +1079,7 @@
             
             console.log('システム初期化完了');
 
-            /* ▼▼▼ GAS 呼び出しのブロック (★ 修正 ★ スコープ対応) ▼▼▼ */
+            /* ▼▼▼ GAS 呼び出しと結果表示の関数を、すべてこのスコープ内に定義 ▼▼▼ */
             
             const generateBtn = document.getElementById('generate-schedule-btn');
             const resultsArea = document.getElementById('schedule-results');
@@ -1245,73 +1160,95 @@
                 }
             });
             
-            // ★ グローバルスコープ(window)に登録
-            window.viewScheduleDetails = async (monthKey) => {
-                 try {
-                    // ★ resultsArea をここで再取得
-                    const resultsArea = document.getElementById('schedule-results');
-                    resultsArea.innerHTML += '<p style="color: #00897B;">詳細データをFirestoreから取得中...</p>';
-                    
-                    const doc = await firestore.collection('schedules').doc(monthKey).get({ source: 'server' });
-                    
-                    if (doc.exists) {
-                        const data = doc.data();
-                        console.log("スケジュールデータ:", data);
-                        showScheduleTable(data);
-                    } else {
-                        alert("詳細データが見つかりません。");
-                    }
-                } catch (error) {
-                    console.error("詳細取得エラー:", error);
-                    alert("詳細の取得に失敗しました: " + error.message);
-                }
-            };
-
-            window.downloadSchedule = (monthKey) => {
-                alert(`${monthKey}の勤務表をダウンロード準備中... (この機能は未実装です)`);
-            };
-            
-            // スケジュール表を表示する関数
-            function showScheduleTable(scheduleData) {
+            // ★ スケジュール表示関数をこのスコープ内に移動
+            function displayScheduleResults(resultData, monthKey) {
                 const resultsArea = document.getElementById('schedule-results');
+                
                 resultsArea.innerHTML = `
-                    <div style="margin-top: 20px; padding: 20px; background: white; border: 1px solid #E0E0E0; border-radius: 8px;">
-                        <h3>勤務表詳細 - ${scheduleData.monthKey}</h3>
+                    <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="color: #2E7D32; margin-bottom: 10px;">
+                            <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が3件 生成されました
+                        </h4>
+                        <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 13px; color: #555;">${resultData.message.replace(/\n/g, '<br>')}</pre>
+                    </div>
                 `;
 
                 ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
-                    const draft = scheduleData[draftKey];
+                    const draft = resultData.data[draftKey]; 
                     if (!draft) return;
                     
                     const validationStatus = draft.validation.isValid 
                         ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
                         : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
-
-                    resultsArea.innerHTML += `
-                        <div style="margin-top: 20px;">
-                            <h4 style="display:inline-block; margin-right: 15px;">案 ${index + 1}: ${draft.type}</h4>
-                            <div style="display:inline-block;">${validationStatus}</div>
-                            <div style="overflow-x: auto;">
-                                ${generateScheduleTableHTML(draft.schedule, scheduleData.monthKey, staffListForAdmin)}
-                            </div>
-                            <button onclick="confirmSchedule('${draftKey}')" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                    
+                    const draftDiv = document.createElement('div');
+                    draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+                    
+                    // ★ 修正 ★ onclick="" ではなく、addEventListener を使う
+                    const confirmButtonId = `confirm-${draftKey}`;
+                    
+                    draftDiv.innerHTML = `
+                        <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
+                            <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type}</h4>
+                            <div>${validationStatus}</div>
+                        </div>
+                        <div style="padding: 15px; overflow-x: auto;">
+                            ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
+                            <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
                                 <i class="fas fa-check"></i> この案で確定する
                             </button>
                         </div>
                     `;
+                    resultsArea.appendChild(draftDiv);
+                    
+                    // ★ 修正 ★ ボタンに関数を紐付け
+                    document.getElementById(confirmButtonId).addEventListener('click', function() {
+                        confirmSchedule(draftKey);
+                    });
                 });
-                
-                resultsArea.innerHTML += '</div>';
             }
-            
-            // 確定ボタン（グローバルスコープに登録）
-            window.confirmSchedule = (draftKey) => {
+
+            // ★ スケジュール表示関数をこのスコープ内に移動
+            function generateScheduleTableHTML(schedule, monthKey, staff) {
+                const [year, month] = monthKey.split("-").map(Number);
+                const daysInMonth = new Date(year, month, 0).getDate();
+                
+                let header = '<tr><th>職員名</th>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    header += `<th>${d}</th>`;
+                }
+                header += '</tr>';
+
+                let body = '';
+                staff.forEach(staffMember => {
+                    if (staffMember.originalId === 31) return; 
+                    
+                    const staffSchedule = schedule[staffMember.uid];
+                    if (!staffSchedule) {
+                        console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
+                        return; 
+                    }
+
+                    body += `<tr><td>${staffMember.name}</td>`;
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+                        const shift = staffSchedule.shifts[dateStr] || '休'; 
+                        body += `<td class="shift-${shift}">${shift}</td>`;
+                    }
+                    body += '</tr>';
+                });
+
+                return `<table class="schedule-table">${header}${body}</table>`;
+            }
+
+            // ★ スケジュール表示関数をこのスコープ内に移動
+            function confirmSchedule(draftKey) {
                 if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
                     return;
                 }
                 alert(`${draftKey} が確定されました。（機能は開発中です）`);
-            };
-
+            }
+            
             /* ▲▲▲ ここまで ▲▲▲ */
 
         } catch (error) {
