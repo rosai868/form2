@@ -1114,51 +1114,67 @@
                 testBtn.addEventListener('click', testGASConnection);
             }
             
-            generateBtn.addEventListener('click', async () => {
-                
-                const year = currentMonth.getFullYear();
-                const month = currentMonth.getMonth() + 1;
-                const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+generateBtn.addEventListener('click', async () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
-                if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？\n処理には数分かかる場合があります。`)) {
-                    return;
-                }
+    if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？`)) {
+        return;
+    }
 
-                generateBtn.disabled = true;
-                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
-                resultsArea.innerHTML = '<p style="color: #00897B;">サーバー(GAS)で計算を開始しました。結果が出るまで数分お待ちください...</p>';
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
+    resultsArea.innerHTML = '<p style="color: #00897B;">処理中...</p>';
 
-                try {
-                    const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
+    try {
+        const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
+        console.log("リクエストURL:", url);
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        
+        console.log("Response status:", response.status);
+        console.log("Response headers:", response.headers);
+        
+        const text = await response.text();
+        console.log("Response text:", text);
+        
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch(parseError) {
+            console.error("JSONパースエラー:", parseError);
+            console.error("受信したテキスト:", text);
+            throw new Error("サーバーからの応答が不正です");
+        }
+        
+        if (!result.success) {
+            throw new Error(result.message);
+        }
 
-                    const response = await fetch(url, {
-                        method: 'GET',
-                        mode: 'cors'
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`サーバーからの応答エラー: ${response.status} ${response.statusText}`);
-                    }
-                    
-                    const result = await response.json();
-
-                    if (!result.success) {
-                        throw new Error(result.message); 
-                    }
-
-                    console.log("GASからの結果:", result);
-                    
-                    // ★ GASから返ってきたデータ(result)を渡す
-                    displayScheduleResults(result, monthKey);
-                    
-                } catch (error) {
-                    console.error('勤務表の作成エラー:', error);
-                    resultsArea.innerHTML = `<p class="error-message">エラーが発生しました: ${error.message}</p>`;
-                } finally {
-                    generateBtn.disabled = false;
-                    generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
-                }
-            });
+        displayScheduleResults(result, monthKey);
+        
+    } catch (error) {
+        console.error('詳細エラー:', error);
+        resultsArea.innerHTML = `
+            <div style="background: #FFEBEE; padding: 15px; border-radius: 8px;">
+                <p class="error-message">エラーが発生しました</p>
+                <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                    ${error.message}
+                </p>
+                <p style="font-size: 11px; color: #999; margin-top: 5px;">
+                    詳細はブラウザのコンソールを確認してください（F12キー）
+                </p>
+            </div>
+        `;
+    } finally {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
+    }
+});
             
             // ★ スケジュール表示関数をこのスコープ内に移動
             function displayScheduleResults(resultData, monthKey) {
