@@ -1079,41 +1079,76 @@
             
             console.log('システム初期化完了');
 
-            /* ▼▼▼ GAS 呼び出しと結果表示の関数を、すべてこのスコープ内に定義 ▼▼▼ */
-            
-            const generateBtn = document.getElementById('generate-schedule-btn');
-            const resultsArea = document.getElementById('schedule-results');
-            const testBtn = document.getElementById('gasTestButton'); 
-            
-            // ★★★ ここはあなたのGASのURLに書き換えてください ★★★
-            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwga1qFM9TnrW7OC1sFX0jVxkIuUkU4CfDZfkBfMotztNKG6fX2bfd4AwNXpo8_Y1t9nQ/exec"; 
+           /* ▼▼▼ GAS 呼び出しと結果表示の関数を、すべてこのスコープ内に定義 ▼▼▼ */
 
-            async function testGASConnection() {
-                alert("GAS接続テスト(GET)を開始します...");
-                const resultsArea = document.getElementById('schedule-results');
-                resultsArea.innerHTML = '<p style="color: #00897B;">GASに接続テスト中...</p>';
-                try {
-                    const url = GAS_API_URL + "?v=" + new Date().getTime();
-                    
-                    const response = await fetch(url, { method: 'GET', mode: 'cors' });
-                    
-                    if (!response.ok) throw new Error(`GETエラー: ${response.statusText}`);
-                    const data = await response.json();
-                    console.log("GET成功:", data);
-                    alert("GET接続成功: " + data.message);
-                    resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">GET接続成功: ${data.message}</p>`;
-                    
-                } catch (error) {
-                    console.error("テストエラー:", error);
-                    alert("接続エラー: " + error.message);
-                    resultsArea.innerHTML = `<p class="error-message">接続エラー: ${error.message}</p>`;
-                }
-            }
+const generateBtn = document.getElementById('generate-schedule-btn');
+const resultsArea = document.getElementById('schedule-results');
+const testBtn = document.getElementById('gasTestButton'); 
+
+// ★★★ ここはあなたのGASのURLに書き換えてください ★★★
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwga1qFM9TnrW7OC1sFX0jVxkIuUkU4CfDZfkBfMotztNKG6fX2bfd4AwNXpo8_Y1t9nQ/exec"; 
+
+// JSONP実行関数
+function callGASWithJSONP(url) {
+    return new Promise((resolve, reject) => {
+        const callbackName = 'gasCallback_' + Date.now();
+        const script = document.createElement('script');
+        
+        // タイムアウト設定（30秒）
+        const timeout = setTimeout(() => {
+            delete window[callbackName];
+            document.body.removeChild(script);
+            reject(new Error('リクエストがタイムアウトしました'));
+        }, 30000);
+        
+        // コールバック関数を設定
+        window[callbackName] = function(data) {
+            clearTimeout(timeout);
+            delete window[callbackName];
+            document.body.removeChild(script);
+            resolve(data);
+        };
+        
+        // エラーハンドリング
+        script.onerror = function() {
+            clearTimeout(timeout);
+            delete window[callbackName];
+            document.body.removeChild(script);
+            reject(new Error('スクリプトの読み込みに失敗しました'));
+        };
+        
+        // URLにコールバックパラメータを追加
+        const separator = url.includes('?') ? '&' : '?';
+        script.src = url + separator + 'callback=' + callbackName;
+        
+        // スクリプトを追加
+        document.body.appendChild(script);
+    });
+}
+
+// GAS接続テストボタンの処理
+if (testBtn) {
+    testBtn.addEventListener('click', async () => {
+        alert("GAS接続テスト(JSONP)を開始します...");
+        resultsArea.innerHTML = '<p style="color: #00897B;">GASに接続テスト中...</p>';
+        
+        try {
+            const url = GAS_API_URL + "?action=test&v=" + new Date().getTime();
+            const data = await callGASWithJSONP(url);
             
-            if (testBtn) {
-                testBtn.addEventListener('click', testGASConnection);
-            }
+            console.log("テスト成功:", data);
+            alert("接続成功: " + data.message);
+            resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">接続成功: ${data.message}</p>`;
             
+        } catch (error) {
+            console.error("テストエラー:", error);
+            alert("接続エラー: " + error.message);
+            resultsArea.innerHTML = `<p class="error-message">接続エラー: ${error.message}</p>`;
+        }
+    });
+}
+
+// 勤務表作成ボタンの処理
 generateBtn.addEventListener('click', async () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
@@ -1125,31 +1160,15 @@ generateBtn.addEventListener('click', async () => {
 
     generateBtn.disabled = true;
     generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
-    resultsArea.innerHTML = '<p style="color: #00897B;">処理中...</p>';
+    resultsArea.innerHTML = '<p style="color: #00897B;">処理中...（最大30秒かかる場合があります）</p>';
 
     try {
         const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
-        console.log("リクエストURL:", url);
+        console.log("リクエストURL (JSONP):", url);
         
-        const response = await fetch(url, {
-            method: 'GET',
-            mode: 'cors'
-        });
-        
-        console.log("Response status:", response.status);
-        console.log("Response headers:", response.headers);
-        
-        const text = await response.text();
-        console.log("Response text:", text);
-        
-        let result;
-        try {
-            result = JSON.parse(text);
-        } catch(parseError) {
-            console.error("JSONパースエラー:", parseError);
-            console.error("受信したテキスト:", text);
-            throw new Error("サーバーからの応答が不正です");
-        }
+        // JSONPでリクエスト
+        const result = await callGASWithJSONP(url);
+        console.log("結果:", result);
         
         if (!result.success) {
             throw new Error(result.message);
@@ -1165,9 +1184,6 @@ generateBtn.addEventListener('click', async () => {
                 <p style="font-size: 12px; color: #666; margin-top: 10px;">
                     ${error.message}
                 </p>
-                <p style="font-size: 11px; color: #999; margin-top: 5px;">
-                    詳細はブラウザのコンソールを確認してください（F12キー）
-                </p>
             </div>
         `;
     } finally {
@@ -1175,98 +1191,95 @@ generateBtn.addEventListener('click', async () => {
         generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
     }
 });
-            
-            // ★ スケジュール表示関数をこのスコープ内に移動
-            function displayScheduleResults(resultData, monthKey) {
-                const resultsArea = document.getElementById('schedule-results');
-                
-                resultsArea.innerHTML = `
-                    <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="color: #2E7D32; margin-bottom: 10px;">
-                            <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が3件 生成されました
-                        </h4>
-                        <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 13px; color: #555;">${resultData.message.replace(/\n/g, '<br>')}</pre>
-                    </div>
-                `;
 
-                ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
-                    const draft = resultData.data[draftKey]; 
-                    if (!draft) return;
-                    
-                    const validationStatus = draft.validation.isValid 
-                        ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
-                        : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
-                    
-                    const draftDiv = document.createElement('div');
-                    draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
-                    
-                    // ★ 修正 ★ onclick="" ではなく、addEventListener を使う
-                    const confirmButtonId = `confirm-${draftKey}`;
-                    
-                    draftDiv.innerHTML = `
-                        <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
-                            <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type}</h4>
-                            <div>${validationStatus}</div>
-                        </div>
-                        <div style="padding: 15px; overflow-x: auto;">
-                            ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
-                            <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-                                <i class="fas fa-check"></i> この案で確定する
-                            </button>
-                        </div>
-                    `;
-                    resultsArea.appendChild(draftDiv);
-                    
-                    // ★ 修正 ★ ボタンに関数を紐付け
-                    document.getElementById(confirmButtonId).addEventListener('click', function() {
-                        confirmSchedule(draftKey);
-                    });
-                });
-            }
+// ★ スケジュール表示関数をこのスコープ内に移動
+function displayScheduleResults(resultData, monthKey) {
+    const resultsArea = document.getElementById('schedule-results');
+    
+    resultsArea.innerHTML = `
+        <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h4 style="color: #2E7D32; margin-bottom: 10px;">
+                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が3件 生成されました
+            </h4>
+            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 13px; color: #555;">${resultData.message.replace(/\n/g, '<br>')}</pre>
+        </div>
+    `;
 
-            // ★ スケジュール表示関数をこのスコープ内に移動
-            function generateScheduleTableHTML(schedule, monthKey, staff) {
-                const [year, month] = monthKey.split("-").map(Number);
-                const daysInMonth = new Date(year, month, 0).getDate();
-                
-                let header = '<tr><th>職員名</th>';
-                for (let d = 1; d <= daysInMonth; d++) {
-                    header += `<th>${d}</th>`;
-                }
-                header += '</tr>';
+    ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
+        const draft = resultData.data[draftKey]; 
+        if (!draft) return;
+        
+        const validationStatus = draft.validation.isValid 
+            ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
+            : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
+        
+        const draftDiv = document.createElement('div');
+        draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+        
+        const confirmButtonId = `confirm-${draftKey}`;
+        
+        draftDiv.innerHTML = `
+            <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
+                <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type}</h4>
+                <div>${validationStatus}</div>
+            </div>
+            <div style="padding: 15px; overflow-x: auto;">
+                ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
+                <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                    <i class="fas fa-check"></i> この案で確定する
+                </button>
+            </div>
+        `;
+        resultsArea.appendChild(draftDiv);
+        
+        document.getElementById(confirmButtonId).addEventListener('click', function() {
+            confirmSchedule(draftKey);
+        });
+    });
+}
 
-                let body = '';
-                staff.forEach(staffMember => {
-                    if (staffMember.originalId === 31) return; 
-                    
-                    const staffSchedule = schedule[staffMember.uid];
-                    if (!staffSchedule) {
-                        console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
-                        return; 
-                    }
+// ★ スケジュール表示関数をこのスコープ内に移動
+function generateScheduleTableHTML(schedule, monthKey, staff) {
+    const [year, month] = monthKey.split("-").map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    
+    let header = '<tr><th>職員名</th>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        header += `<th>${d}</th>`;
+    }
+    header += '</tr>';
 
-                    body += `<tr><td>${staffMember.name}</td>`;
-                    for (let d = 1; d <= daysInMonth; d++) {
-                        const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
-                        const shift = staffSchedule.shifts[dateStr] || '休'; 
-                        body += `<td class="shift-${shift}">${shift}</td>`;
-                    }
-                    body += '</tr>';
-                });
+    let body = '';
+    staff.forEach(staffMember => {
+        if (staffMember.originalId === 31) return; 
+        
+        const staffSchedule = schedule[staffMember.uid];
+        if (!staffSchedule) {
+            console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
+            return; 
+        }
 
-                return `<table class="schedule-table">${header}${body}</table>`;
-            }
+        body += `<tr><td>${staffMember.name}</td>`;
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
+            const shift = staffSchedule.shifts[dateStr] || '休'; 
+            body += `<td class="shift-${shift}">${shift}</td>`;
+        }
+        body += '</tr>';
+    });
 
-            // ★ スケジュール表示関数をこのスコープ内に移動
-            function confirmSchedule(draftKey) {
-                if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
-                    return;
-                }
-                alert(`${draftKey} が確定されました。（機能は開発中です）`);
-            }
-            
-            /* ▲▲▲ ここまで ▲▲▲ */
+    return `<table class="schedule-table">${header}${body}</table>`;
+}
 
+// ★ スケジュール確定関数をこのスコープ内に移動
+function confirmSchedule(draftKey) {
+    if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
+        return;
+    }
+    alert(`${draftKey} が確定されました。（機能は開発中です）`);
+}
+
+/* ▲▲▲ ここまで ▲▲▲ */
         } catch (error) {
             console.error('初期化エラー:', error);
             document.getElementById('loadingSection').innerHTML = 
