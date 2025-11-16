@@ -1358,59 +1358,158 @@ function displayScheduleResults(data, monthKey) {
 function generateScheduleTableHTML(schedule, monthKey, staff) {
     console.log("=== generateScheduleTableHTML 開始 ===");
     console.log("monthKey:", monthKey);
-    console.log("schedule (全体):", schedule);
-    console.log("staff数:", staff.length);
-    
-    // ★★★ scheduleの最初の3人分を詳細に出力 ★★★
-    let debugCount = 0;
-    for (let uid in schedule) {
-        if (debugCount >= 3) break;
-        console.log(`=== スタッフ UID: ${uid} ===`);
-        console.log("staffInfo:", schedule[uid].staffInfo);
-        console.log("shifts:", schedule[uid].shifts);
-        console.log("counts:", schedule[uid].counts);
-        debugCount++;
-    }
     
     const [year, month] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     
+    // ヘッダー
     let header = '<tr><th>職員名</th>';
     for (let d = 1; d <= daysInMonth; d++) {
         header += `<th>${d}</th>`;
     }
     header += '</tr>';
 
+    // 本体
     let body = '';
     staff.forEach((staffMember, index) => {
         if (staffMember.originalId === 31) return; 
         
         const staffSchedule = schedule[staffMember.uid];
-        
         if (!staffSchedule) {
-            console.warn(`❌ スケジュールデータが見つかりません: ${staffMember.name} (UID: ${staffMember.uid})`);
+            console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
             return; 
-        }
-        
-        if (index < 3) { // 最初の3人だけ詳細ログ
-            console.log(`${staffMember.name}のシフト:`, staffSchedule.shifts);
         }
 
         body += `<tr><td>${staffMember.name}</td>`;
         for (let d = 1; d <= daysInMonth; d++) {
-            // ★重要★ shiftsのキーが数字(1,2,3...)か文字列("1","2","3"...)か確認
             const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)] || '休';
-            
-            if (index === 0 && d <= 5) { // 最初の人の最初の5日間だけログ出力
-                console.log(`  ${d}日目: キー[${d}]="${staffSchedule.shifts[d]}", キー["${d}"]="${staffSchedule.shifts[String(d)]}" → 表示="${shift}"`);
-            }
-            
             body += `<td class="shift-${shift}">${shift}</td>`;
         }
         body += '</tr>';
     });
 
-    return `<table class="schedule-table">${header}${body}</table>`;
+    // ★★★ 人数カウント表を追加 ★★★
+    let countTable = generateCountTable(schedule, staff, daysInMonth);
+
+    return `
+        <table class="schedule-table">${header}${body}</table>
+        <h4 style="margin-top: 20px; color: #5D4037;">日毎の人数集計</h4>
+        ${countTable}
+    `;
+}
+
+// ★★★ 新規追加: 人数カウント表を生成 ★★★
+function generateCountTable(schedule, staff, daysInMonth) {
+    // 各日のカウント
+    const dailyCounts = {};
+    
+    for (let d = 1; d <= daysInMonth; d++) {
+        dailyCounts[d] = {
+            日: { A: 0, B: 0, total: 0 },
+            準: { A: 0, B: 0, total: 0 },
+            夜: { A: 0, B: 0, total: 0 }
+        };
+    }
+    
+    // カウント集計
+    staff.forEach(staffMember => {
+        if (staffMember.originalId === 31) return;
+        
+        const staffSchedule = schedule[staffMember.uid];
+        if (!staffSchedule) return;
+        
+        const team = staffMember.team;
+        
+        for (let d = 1; d <= daysInMonth; d++) {
+            const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)];
+            
+            if (shift === '日' || shift === '準' || shift === '夜') {
+                dailyCounts[d][shift][team]++;
+                dailyCounts[d][shift].total++;
+            }
+        }
+    });
+    
+    // テーブル生成
+    let table = '<table class="schedule-table" style="font-size: 10px;">';
+    
+    // ヘッダー
+    table += '<tr><th rowspan="2">シフト</th><th rowspan="2">チーム</th>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        table += `<th>${d}</th>`;
+    }
+    table += '</tr>';
+    
+    // 日勤
+    table += '<tr><td rowspan="3" style="background: #E8F5E9;">日勤</td><td>A</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        const count = dailyCounts[d].日.A;
+        const bgColor = count === 6 ? '#C8E6C9' : (count < 6 ? '#FFCDD2' : '#FFE082');
+        table += `<td style="background: ${bgColor};">${count}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '<tr><td>B</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        const count = dailyCounts[d].日.B;
+        const bgColor = count === 6 ? '#C8E6C9' : (count < 6 ? '#FFCDD2' : '#FFE082');
+        table += `<td style="background: ${bgColor};">${count}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '<tr><td>計</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        const count = dailyCounts[d].日.total;
+        const bgColor = count === 12 ? '#C8E6C9' : (count < 12 ? '#FFCDD2' : '#FFE082');
+        table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
+    }
+    table += '</tr>';
+    
+    // 準夜勤
+    table += '<tr><td rowspan="3" style="background: #E1F5FE;">準夜</td><td>A</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        table += `<td>${dailyCounts[d].準.A}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '<tr><td>B</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        table += `<td>${dailyCounts[d].準.B}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '<tr><td>計</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        const count = dailyCounts[d].準.total;
+        const bgColor = count === 3 ? '#C8E6C9' : (count < 3 ? '#FFCDD2' : '#FFE082');
+        table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
+    }
+    table += '</tr>';
+    
+    // 夜勤
+    table += '<tr><td rowspan="3" style="background: #E8EAF6;">夜勤</td><td>A</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        table += `<td>${dailyCounts[d].夜.A}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '<tr><td>B</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        table += `<td>${dailyCounts[d].夜.B}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '<tr><td>計</td>';
+    for (let d = 1; d <= daysInMonth; d++) {
+        const count = dailyCounts[d].夜.total;
+        const bgColor = count === 3 ? '#C8E6C9' : (count < 3 ? '#FFCDD2' : '#FFE082');
+        table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
+    }
+    table += '</tr>';
+    
+    table += '</table>';
+    
+    return table;
 }
 
 // ★ スケジュール確定関数をこのスコープ内に移動
