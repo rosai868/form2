@@ -1335,6 +1335,11 @@ function displayScheduleResults(data, monthKey) {
 
 // ★ スケジュール表示関数をこのスコープ内に移動
 function generateScheduleTableHTML(schedule, monthKey, staff) {
+    console.log("=== generateScheduleTableHTML 開始 ===");
+    console.log("monthKey:", monthKey);
+    console.log("schedule:", schedule);
+    console.log("staff数:", staff.length);
+    
     const [year, month] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     
@@ -1349,6 +1354,10 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
         if (staffMember.originalId === 31) return; 
         
         const staffSchedule = schedule[staffMember.uid];
+        
+        // ★デバッグ追加★
+        console.log(`${staffMember.name} (${staffMember.uid}):`, staffSchedule);
+        
         if (!staffSchedule) {
             console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
             return; 
@@ -1356,8 +1365,7 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
 
         body += `<tr><td>${staffMember.name}</td>`;
         for (let d = 1; d <= daysInMonth; d++) {
-            const dateStr = `${monthKey}-${String(d).padStart(2, '0')}`;
-            const shift = staffSchedule.shifts[dateStr] || '休'; 
+            const shift = staffSchedule.shifts[d] || '休'; // ★修正: dateStrではなくdで直接アクセス
             body += `<td class="shift-${shift}">${shift}</td>`;
         }
         body += '</tr>';
