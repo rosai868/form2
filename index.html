@@ -1149,6 +1149,7 @@ if (testBtn) {
 }
 
 // 勤務表作成ボタンの処理
+// 勤務表作成ボタンの処理
 generateBtn.addEventListener('click', async () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth() + 1;
@@ -1159,22 +1160,37 @@ generateBtn.addEventListener('click', async () => {
     }
 
     generateBtn.disabled = true;
-    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 勤務表を作成中...';
-    resultsArea.innerHTML = '<p style="color: #00897B;">処理中...（最大30秒かかる場合があります）</p>';
+    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ジョブを登録中...';
+    resultsArea.innerHTML = '<p style="color: #00897B;">処理を開始しています...</p>';
 
     try {
-        const url = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
-        console.log("リクエストURL (JSONP):", url);
+        // ステップ1: ジョブ登録
+        const createUrl = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
+        console.log("ジョブ登録URL:", createUrl);
         
-        // JSONPでリクエスト
-        const result = await callGASWithJSONP(url);
-        console.log("結果:", result);
+        const createResult = await callGASWithJSONP(createUrl);
+        console.log("ジョブ登録結果:", createResult);
         
-        if (!result.success) {
-            throw new Error(result.message);
+        if (!createResult.success) {
+            throw new Error(createResult.message);
         }
 
-        displayScheduleResults(result, monthKey);
+        const jobId = createResult.jobId; // 例: "schedule_2025-12"
+        console.log("ジョブID:", jobId);
+
+        // ステップ2: ジョブ状態をポーリング (定期的にチェック)
+        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 処理中...';
+        resultsArea.innerHTML = `
+            <p style="color: #00897B;">
+                <i class="fas fa-cog fa-spin"></i> スケジュールを生成中です...<br>
+                <span style="font-size: 12px;">この処理には数分かかることがあります。しばらくお待ちください。</span>
+            </p>
+        `;
+
+        const scheduleData = await pollJobStatus(jobId, monthKey);
+        
+        // ステップ3: 結果を表示
+        displayScheduleResults(scheduleData, monthKey);
         
     } catch (error) {
         console.error('詳細エラー:', error);
@@ -1192,26 +1208,105 @@ generateBtn.addEventListener('click', async () => {
     }
 });
 
+// ★★★ 新規追加: ジョブ状態をポーリングする関数 ★★★
+async function pollJobStatus(jobId, monthKey) {
+    const maxAttempts = 60; // 最大60回 (5分間)
+    const interval = 5000; // 5秒ごと
+    let attempt = 0;
+
+    while (attempt < maxAttempts) {
+        attempt++;
+        console.log(`ポーリング ${attempt}/${maxAttempts}...`);
+
+        try {
+            // ジョブ状態を確認
+            const statusUrl = `${GAS_API_URL}?action=checkJob&jobId=${jobId}&v=${new Date().getTime()}`;
+            const statusResult = await callGASWithJSONP(statusUrl);
+            
+            console.log("ジョブ状態:", statusResult);
+
+            if (!statusResult.success) {
+                throw new Error("ジョブ状態の確認に失敗しました");
+            }
+
+            const status = statusResult.status;
+
+            if (status === "completed") {
+                // 完了 → スケジュール結果を取得
+                console.log("処理完了!結果を取得します...");
+                const scheduleUrl = `${GAS_API_URL}?action=getSchedule&month=${monthKey}&v=${new Date().getTime()}`;
+                const scheduleResult = await callGASWithJSONP(scheduleUrl);
+                
+                if (!scheduleResult.success) {
+                    throw new Error("スケジュールの取得に失敗しました: " + scheduleResult.message);
+                }
+
+                return scheduleResult.data; // スケジュールデータを返す
+
+            } else if (status === "failed") {
+                throw new Error("スケジュール生成に失敗しました");
+
+            } else if (status === "processing" || status === "pending") {
+                // まだ処理中 → 待機
+                resultsArea.innerHTML = `
+                    <p style="color: #00897B;">
+                        <i class="fas fa-cog fa-spin"></i> 処理中... (${attempt * interval / 1000}秒経過)<br>
+                        <span style="font-size: 12px;">ステータス: ${status}</span>
+                    </p>
+                `;
+                await sleep(interval);
+                continue;
+
+            } else {
+                throw new Error("不明なステータス: " + status);
+            }
+
+        } catch (error) {
+            console.error("ポーリングエラー:", error);
+            if (attempt >= maxAttempts) {
+                throw new Error("タイムアウト: 処理に時間がかかりすぎています");
+            }
+            // エラーが発生しても、数回はリトライする
+            await sleep(interval);
+        }
+    }
+
+    throw new Error("タイムアウト: 処理が完了しませんでした");
+}
+
+// ★★★ 新規追加: スリープ関数 ★★★
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ★ スケジュール表示関数をこのスコープ内に移動
-function displayScheduleResults(resultData, monthKey) {
+// ★ スケジュール表示関数を修正
+function displayScheduleResults(data, monthKey) {
     const resultsArea = document.getElementById('schedule-results');
     
     resultsArea.innerHTML = `
         <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             <h4 style="color: #2E7D32; margin-bottom: 10px;">
-                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が3件 生成されました
+                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が生成されました
             </h4>
-            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 13px; color: #555;">${resultData.message.replace(/\n/g, '<br>')}</pre>
         </div>
     `;
 
+    if (!data || !data.drafts) {
+        resultsArea.innerHTML += '<p class="error-message">スケジュールデータが見つかりません</p>';
+        return;
+    }
+
     ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
-        const draft = resultData.data[draftKey]; 
-        if (!draft) return;
+        const draft = data.drafts[draftKey]; 
+        if (!draft) {
+            console.warn(`${draftKey} が見つかりません`);
+            return;
+        }
         
-        const validationStatus = draft.validation.isValid 
+        const validationStatus = draft.validation && draft.validation.isValid 
             ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
-            : `<span style="color: #D32F2F;">✗ エラー ${draft.validation.errors.length}件</span>`;
+            : `<span style="color: #D32F2F;">✗ エラー ${draft.validation?.errors?.length || 0}件</span>`;
         
         const draftDiv = document.createElement('div');
         draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
@@ -1220,7 +1315,7 @@ function displayScheduleResults(resultData, monthKey) {
         
         draftDiv.innerHTML = `
             <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type}</h4>
+                <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type || 'タイプ不明'}</h4>
                 <div>${validationStatus}</div>
             </div>
             <div style="padding: 15px; overflow-x: auto;">
