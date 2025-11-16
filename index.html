@@ -1210,8 +1210,8 @@ generateBtn.addEventListener('click', async () => {
 
 // ★★★ 新規追加: ジョブ状態をポーリングする関数 ★★★
 async function pollJobStatus(jobId, monthKey) {
-    const maxAttempts = 60; // 最大60回 (5分間)
-    const interval = 5000; // 5秒ごと
+    const maxAttempts = 60;
+    const interval = 5000;
     let attempt = 0;
 
     while (attempt < maxAttempts) {
@@ -1219,7 +1219,6 @@ async function pollJobStatus(jobId, monthKey) {
         console.log(`ポーリング ${attempt}/${maxAttempts}...`);
 
         try {
-            // ジョブ状態を確認
             const statusUrl = `${GAS_API_URL}?action=checkJob&jobId=${jobId}&v=${new Date().getTime()}`;
             const statusResult = await callGASWithJSONP(statusUrl);
             
@@ -1232,22 +1231,45 @@ async function pollJobStatus(jobId, monthKey) {
             const status = statusResult.status;
 
             if (status === "completed") {
-                // 完了 → スケジュール結果を取得
                 console.log("処理完了!結果を取得します...");
                 const scheduleUrl = `${GAS_API_URL}?action=getSchedule&month=${monthKey}&v=${new Date().getTime()}`;
                 const scheduleResult = await callGASWithJSONP(scheduleUrl);
+                
+                // ★★★ デバッグ: 取得したデータを詳細に出力 ★★★
+                console.log("=== スケジュール取得結果 (全体) ===");
+                console.log(scheduleResult);
+                
+                console.log("=== scheduleResult.data ===");
+                console.log(scheduleResult.data);
+                
+                console.log("=== scheduleResult.data.drafts ===");
+                console.log(scheduleResult.data.drafts);
+                
+                if (scheduleResult.data && scheduleResult.data.drafts) {
+                    console.log("=== draft1 ===");
+                    console.log(scheduleResult.data.drafts.draft1);
+                    
+                    if (scheduleResult.data.drafts.draft1 && scheduleResult.data.drafts.draft1.schedule) {
+                        console.log("=== draft1.schedule (最初の3人分) ===");
+                        let count = 0;
+                        for (let uid in scheduleResult.data.drafts.draft1.schedule) {
+                            if (count >= 3) break;
+                            console.log(`UID: ${uid}`, scheduleResult.data.drafts.draft1.schedule[uid]);
+                            count++;
+                        }
+                    }
+                }
                 
                 if (!scheduleResult.success) {
                     throw new Error("スケジュールの取得に失敗しました: " + scheduleResult.message);
                 }
 
-                return scheduleResult.data; // スケジュールデータを返す
+                return scheduleResult.data;
 
             } else if (status === "failed") {
                 throw new Error("スケジュール生成に失敗しました");
 
             } else if (status === "processing" || status === "pending") {
-                // まだ処理中 → 待機
                 resultsArea.innerHTML = `
                     <p style="color: #00897B;">
                         <i class="fas fa-cog fa-spin"></i> 処理中... (${attempt * interval / 1000}秒経過)<br>
@@ -1266,7 +1288,6 @@ async function pollJobStatus(jobId, monthKey) {
             if (attempt >= maxAttempts) {
                 throw new Error("タイムアウト: 処理に時間がかかりすぎています");
             }
-            // エラーが発生しても、数回はリトライする
             await sleep(interval);
         }
     }
@@ -1337,8 +1358,19 @@ function displayScheduleResults(data, monthKey) {
 function generateScheduleTableHTML(schedule, monthKey, staff) {
     console.log("=== generateScheduleTableHTML 開始 ===");
     console.log("monthKey:", monthKey);
-    console.log("schedule:", schedule);
+    console.log("schedule (全体):", schedule);
     console.log("staff数:", staff.length);
+    
+    // ★★★ scheduleの最初の3人分を詳細に出力 ★★★
+    let debugCount = 0;
+    for (let uid in schedule) {
+        if (debugCount >= 3) break;
+        console.log(`=== スタッフ UID: ${uid} ===`);
+        console.log("staffInfo:", schedule[uid].staffInfo);
+        console.log("shifts:", schedule[uid].shifts);
+        console.log("counts:", schedule[uid].counts);
+        debugCount++;
+    }
     
     const [year, month] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -1350,22 +1382,29 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
     header += '</tr>';
 
     let body = '';
-    staff.forEach(staffMember => {
+    staff.forEach((staffMember, index) => {
         if (staffMember.originalId === 31) return; 
         
         const staffSchedule = schedule[staffMember.uid];
         
-        // ★デバッグ追加★
-        console.log(`${staffMember.name} (${staffMember.uid}):`, staffSchedule);
-        
         if (!staffSchedule) {
-            console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
+            console.warn(`❌ スケジュールデータが見つかりません: ${staffMember.name} (UID: ${staffMember.uid})`);
             return; 
+        }
+        
+        if (index < 3) { // 最初の3人だけ詳細ログ
+            console.log(`${staffMember.name}のシフト:`, staffSchedule.shifts);
         }
 
         body += `<tr><td>${staffMember.name}</td>`;
         for (let d = 1; d <= daysInMonth; d++) {
-            const shift = staffSchedule.shifts[d] || '休'; // ★修正: dateStrではなくdで直接アクセス
+            // ★重要★ shiftsのキーが数字(1,2,3...)か文字列("1","2","3"...)か確認
+            const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)] || '休';
+            
+            if (index === 0 && d <= 5) { // 最初の人の最初の5日間だけログ出力
+                console.log(`  ${d}日目: キー[${d}]="${staffSchedule.shifts[d]}", キー["${d}"]="${staffSchedule.shifts[String(d)]}" → 表示="${shift}"`);
+            }
+            
             body += `<td class="shift-${shift}">${shift}</td>`;
         }
         body += '</tr>';
