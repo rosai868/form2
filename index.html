@@ -1362,10 +1362,29 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
     const [year, month] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     
+    // ★祝日データ (Web側のholidaysオブジェクトを使用)
+    
     // ヘッダー
     let header = '<tr><th>職員名</th>';
     for (let d = 1; d <= daysInMonth; d++) {
-        header += `<th>${d}</th>`;
+        const date = new Date(year, month - 1, d);
+        const dayOfWeek = date.getDay(); // 0=日曜, 6=土曜
+        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        
+        // ★日付セルの背景色を設定
+        let headerStyle = '';
+        if (holidays[dateString]) {
+            // 祝日: 赤系
+            headerStyle = 'background: #FFEBEE; color: #C62828;';
+        } else if (dayOfWeek === 0) {
+            // 日曜: 赤系
+            headerStyle = 'background: #FFEBEE; color: #C62828;';
+        } else if (dayOfWeek === 6) {
+            // 土曜: 青系
+            headerStyle = 'background: #E3F2FD; color: #1565C0;';
+        }
+        
+        header += `<th style="${headerStyle}">${d}</th>`;
     }
     header += '</tr>';
 
@@ -1380,27 +1399,51 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
             return; 
         }
 
-        body += `<tr><td>${staffMember.name}</td>`;
+        // ★名前欄に情報を追加
+        let nameDisplay = staffMember.name;
+        
+        // チーム表示
+        if (staffMember.team) {
+            nameDisplay += ` <span style="color: ${staffMember.team === 'A' ? '#1976D2' : '#E65100'}; font-weight: bold;">${staffMember.team}</span>`;
+        }
+        
+        // リーダー表示
+        if (staffMember.leader) {
+            nameDisplay += ' <span style="color: #F57C00; font-weight: bold;">L</span>';
+        }
+
+        body += `<tr><td>${nameDisplay}</td>`;
+        
         for (let d = 1; d <= daysInMonth; d++) {
             const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)] || '休';
-            body += `<td class="shift-${shift}">${shift}</td>`;
+            
+            // ★日付セルの背景色を設定
+            const date = new Date(year, month - 1, d);
+            const dayOfWeek = date.getDay();
+            const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            
+            let cellStyle = '';
+            if (holidays[dateString]) {
+                cellStyle = 'background: #FFF9F9;'; // 祝日は薄いピンク
+            } else if (dayOfWeek === 0) {
+                cellStyle = 'background: #FFF9F9;'; // 日曜は薄いピンク
+            } else if (dayOfWeek === 6) {
+                cellStyle = 'background: #F4F9FF;'; // 土曜は薄い青
+            }
+            
+            body += `<td class="shift-${shift}" style="${cellStyle}">${shift}</td>`;
         }
         body += '</tr>';
     });
 
-    // ★★★ 人数カウント表を追加 ★★★
-    let countTable = generateCountTable(schedule, staff, daysInMonth);
-
-    return `
-        <table class="schedule-table">${header}${body}</table>
-        <h4 style="margin-top: 20px; color: #5D4037;">日毎の人数集計</h4>
-        ${countTable}
-    `;
+    return `<table class="schedule-table">${header}${body}</table>`;
 }
 
 // ★★★ 新規追加: 人数カウント表を生成 ★★★
 // ★★★ 修正版: 人数カウント表を生成 ★★★
 function generateCountTable(schedule, staff, daysInMonth) {
+    const [year, month] = currentMonth.getFullYear(), currentMonth.getMonth() + 1;
+    
     // 各日のカウント
     const dailyCounts = {};
     
@@ -1425,7 +1468,7 @@ function generateCountTable(schedule, staff, daysInMonth) {
             const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)];
             
             if (shift === '日' || shift === '準' || shift === '夜') {
-                dailyCounts[d][shift][team]++;
+                dailyCounts[d][team]++;
                 dailyCounts[d][shift].total++;
             }
         }
@@ -1434,10 +1477,23 @@ function generateCountTable(schedule, staff, daysInMonth) {
     // テーブル生成
     let table = '<table class="schedule-table" style="font-size: 10px;">';
     
-    // ★修正: ヘッダーを1行に統一
+    // ★ヘッダー(日付に色付け)
     table += '<tr><th>シフト</th><th>チーム</th>';
     for (let d = 1; d <= daysInMonth; d++) {
-        table += `<th>${d}</th>`;
+        const date = new Date(year, month - 1, d);
+        const dayOfWeek = date.getDay();
+        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        
+        let headerStyle = 'background: #80CBC4; color: white;'; // デフォルト
+        if (holidays[dateString]) {
+            headerStyle = 'background: #EF5350; color: white;';
+        } else if (dayOfWeek === 0) {
+            headerStyle = 'background: #EF5350; color: white;';
+        } else if (dayOfWeek === 6) {
+            headerStyle = 'background: #42A5F5; color: white;';
+        }
+        
+        table += `<th style="${headerStyle}">${d}</th>`;
     }
     table += '</tr>';
     
@@ -1450,7 +1506,6 @@ function generateCountTable(schedule, staff, daysInMonth) {
     }
     table += '</tr>';
     
-    // 日勤 - B
     table += '<tr><td>B</td>';
     for (let d = 1; d <= daysInMonth; d++) {
         const count = dailyCounts[d].日.B;
@@ -1459,7 +1514,6 @@ function generateCountTable(schedule, staff, daysInMonth) {
     }
     table += '</tr>';
     
-    // 日勤 - 計
     table += '<tr><td>計</td>';
     for (let d = 1; d <= daysInMonth; d++) {
         const count = dailyCounts[d].日.total;
@@ -1475,14 +1529,12 @@ function generateCountTable(schedule, staff, daysInMonth) {
     }
     table += '</tr>';
     
-    // 準夜勤 - B
     table += '<tr><td>B</td>';
     for (let d = 1; d <= daysInMonth; d++) {
         table += `<td>${dailyCounts[d].準.B}</td>`;
     }
     table += '</tr>';
     
-    // 準夜勤 - 計
     table += '<tr><td>計</td>';
     for (let d = 1; d <= daysInMonth; d++) {
         const count = dailyCounts[d].準.total;
@@ -1498,14 +1550,12 @@ function generateCountTable(schedule, staff, daysInMonth) {
     }
     table += '</tr>';
     
-    // 夜勤 - B
     table += '<tr><td>B</td>';
     for (let d = 1; d <= daysInMonth; d++) {
         table += `<td>${dailyCounts[d].夜.B}</td>`;
     }
     table += '</tr>';
     
-    // 夜勤 - 計
     table += '<tr><td>計</td>';
     for (let d = 1; d <= daysInMonth; d++) {
         const count = dailyCounts[d].夜.total;
@@ -1518,6 +1568,7 @@ function generateCountTable(schedule, staff, daysInMonth) {
     
     return table;
 }
+            
 // ★ スケジュール確定関数をこのスコープ内に移動
 function confirmSchedule(draftKey) {
     if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
