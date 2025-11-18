@@ -1454,6 +1454,162 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
         ${personalCountTable}
     `;
 }
+
+// ★★★ 新規追加: 個人別シフト回数集計表を生成 ★★★
+function generatePersonalCountTable(schedule, staff) {
+    // テーブル生成
+    let table = '<table class="schedule-table" style="font-size: 11px;">';
+    
+    // ヘッダー
+    table += '<tr>';
+    table += '<th>職員名</th>';
+    table += '<th>チーム</th>';
+    table += '<th style="background: #E8F5E9;">日勤</th>';
+    table += '<th style="background: #E1F5FE;">準夜</th>';
+    table += '<th style="background: #E8EAF6;">夜勤</th>';
+    table += '<th style="background: #FFF3E0;">準+夜<br>合計</th>';
+    table += '<th style="background: #F5F5F5;">休み</th>';
+    table += '<th style="background: #E3F2FD;">年休等</th>';
+    table += '<th style="background: #FFEBEE;">合計</th>';
+    table += '</tr>';
+    
+    // チームAとチームBに分けてソート
+    const teamAStaff = staff.filter(s => s.originalId !== 31 && s.team === 'A')
+        .sort((a, b) => (a.originalId || 0) - (b.originalId || 0));
+    const teamBStaff = staff.filter(s => s.originalId !== 31 && s.team === 'B')
+        .sort((a, b) => (a.originalId || 0) - (b.originalId || 0));
+    
+    // チームA小計用変数
+    let teamATotal = { 日: 0, 準: 0, 夜: 0, 休: 0, その他: 0 };
+    
+    // チームAのデータ
+    teamAStaff.forEach(staffMember => {
+        const staffSchedule = schedule[staffMember.uid];
+        if (!staffSchedule) return;
+        
+        table += generatePersonalCountRow(staffMember, staffSchedule, teamATotal);
+    });
+    
+    // チームA小計
+    table += generateSubtotalRow('チームA 小計', teamATotal, '#E3F2FD');
+    
+    // チームB小計用変数
+    let teamBTotal = { 日: 0, 準: 0, 夜: 0, 休: 0, その他: 0 };
+    
+    // チームBのデータ
+    teamBStaff.forEach(staffMember => {
+        const staffSchedule = schedule[staffMember.uid];
+        if (!staffSchedule) return;
+        
+        table += generatePersonalCountRow(staffMember, staffSchedule, teamBTotal);
+    });
+    
+    // チームB小計
+    table += generateSubtotalRow('チームB 小計', teamBTotal, '#FFE0B2');
+    
+    // 全体合計
+    let grandTotal = {
+        日: teamATotal.日 + teamBTotal.日,
+        準: teamATotal.準 + teamBTotal.準,
+        夜: teamATotal.夜 + teamBTotal.夜,
+        休: teamATotal.休 + teamBTotal.休,
+        その他: teamATotal.その他 + teamBTotal.その他
+    };
+    table += generateSubtotalRow('全体合計', grandTotal, '#E0E0E0', true);
+    
+    table += '</table>';
+    
+    return table;
+}
+
+// ★★★ ヘルパー関数: 個人の行を生成 ★★★
+function generatePersonalCountRow(staffMember, staffSchedule, teamTotal) {
+    let row = '<tr>';
+    
+    // 名前
+    let nameDisplay = staffMember.name;
+    if (staffMember.leader) {
+        nameDisplay += ' <span style="color: #F57C00; font-weight: bold;">L</span>';
+    }
+    row += `<td style="text-align: left; padding-left: 10px;">${nameDisplay}</td>`;
+    
+    // チーム
+    const teamColor = staffMember.team === 'A' ? '#1976D2' : '#E65100';
+    row += `<td style="color: ${teamColor}; font-weight: bold;">${staffMember.team}</td>`;
+    
+    // 各シフトのカウント
+    const dayCount = staffSchedule.counts['日'] || 0;
+    const eveningCount = staffSchedule.counts['準'] || 0;
+    const nightCount = staffSchedule.counts['夜'] || 0;
+    const nightTotal = eveningCount + nightCount;
+    const restCount = staffSchedule.counts['休'] || 0;
+    
+    // その他（年、出、特、AM、PM、夏）
+    const otherCount = (staffSchedule.counts['年'] || 0) + 
+                       (staffSchedule.counts['出'] || 0) + 
+                       (staffSchedule.counts['特'] || 0) + 
+                       (staffSchedule.counts['AM'] || 0) + 
+                       (staffSchedule.counts['PM'] || 0) + 
+                       (staffSchedule.counts['夏'] || 0);
+    
+    const total = dayCount + eveningCount + nightCount + restCount + otherCount;
+    
+    // チーム小計に加算
+    if (teamTotal) {
+        teamTotal.日 += dayCount;
+        teamTotal.準 += eveningCount;
+        teamTotal.夜 += nightCount;
+        teamTotal.休 += restCount;
+        teamTotal.その他 += otherCount;
+    }
+    
+    // 日勤
+    row += `<td style="background: #E8F5E9;">${dayCount}</td>`;
+    
+    // 準夜
+    row += `<td style="background: #E1F5FE;">${eveningCount}</td>`;
+    
+    // 夜勤
+    row += `<td style="background: #E8EAF6;">${nightCount}</td>`;
+    
+    // 準+夜合計（8日超過チェック）
+    const nightTotalBg = nightTotal > 8 ? '#FFCDD2' : '#FFF3E0';
+    row += `<td style="background: ${nightTotalBg}; font-weight: bold;">${nightTotal}</td>`;
+    
+    // 休み
+    row += `<td style="background: #F5F5F5;">${restCount}</td>`;
+    
+    // 年休等
+    row += `<td style="background: #E3F2FD;">${otherCount}</td>`;
+    
+    // 合計
+    row += `<td style="background: #FFEBEE; font-weight: bold;">${total}</td>`;
+    
+    row += '</tr>';
+    return row;
+}
+
+// ★★★ ヘルパー関数: 小計行を生成 ★★★
+function generateSubtotalRow(label, totals, bgColor, isBold = false) {
+    const nightTotal = totals.準 + totals.夜;
+    const grandTotal = totals.日 + totals.準 + totals.夜 + totals.休 + totals.その他;
+    
+    const fontWeight = isBold ? 'font-weight: bold;' : '';
+    
+    let row = '<tr>';
+    row += `<td colspan="2" style="text-align: center; background: ${bgColor}; ${fontWeight}">${label}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.日}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.準}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.夜}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${nightTotal}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.休}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.その他}</td>`;
+    row += `<td style="background: ${bgColor}; ${fontWeight}">${grandTotal}</td>`;
+    row += '</tr>';
+    
+    return row;
+}
+            
 // ★★★ 新規追加: 人数カウント表を生成 ★★★
 // ★★★ 修正版: 人数カウント表を生成 ★★★
 function generateCountTable(schedule, staff, daysInMonth) {
