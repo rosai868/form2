@@ -1388,7 +1388,7 @@ function displayScheduleResults(data, monthKey) {
     resultsArea.innerHTML = `
         <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             <h4 style="color: #2E7D32; margin-bottom: 10px;">
-                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表案が生成されました
+                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表が生成されました
             </h4>
         </div>
     `;
@@ -1398,90 +1398,89 @@ function displayScheduleResults(data, monthKey) {
         return;
     }
     
-    ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
-        const draft = data.drafts[draftKey]; 
-        if (!draft) {
-            console.warn(`${draftKey} が見つかりません`);
-            return;
-        }
-        
-        // ★致命的エラーチェック
-        const hasCriticalErrors = draft.validation && 
-                                   draft.validation.criticalErrors && 
-                                   draft.validation.criticalErrors.length > 0;
-        
-        const draftDiv = document.createElement('div');
-        draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
-        
-        // ★致命的エラーがある場合
-        if (hasCriticalErrors) {
-            draftDiv.innerHTML = `
-                <div style="background: #FFEBEE; padding: 10px 15px;">
-                    <h4 style="color: #D32F2F;">案 ${index + 1}: ${draft.type || 'タイプ不明'} ⚠️ 必須条件未達</h4>
-                </div>
-                <div style="padding: 15px; background: #FFF9F9;">
-                    <p style="color: #D32F2F; font-weight: bold; margin-bottom: 10px;">
-                        以下の必須条件が満たせていないため、この案はスケジュールとして成立していません:
-                    </p>
-                    <ul style="color: #D32F2F; margin-left: 20px;">
-                        ${draft.validation.criticalErrors.map(err => `<li>${err}</li>`).join('')}
-                    </ul>
-                    <p style="color: #666; margin-top: 15px; font-size: 13px;">
-                        <em>※ この案は表示されません。他の案をご確認ください。</em>
-                    </p>
-                </div>
-            `;
-            resultsArea.appendChild(draftDiv);
-            return; // この案は表として表示しない
-        }
-        
-        // ★正常な案の表示
-        const warningCount = draft.validation?.warnings?.length || 0;
-        const validationStatus = warningCount === 0
-            ? '<span style="color: #2E7D32;">✓ すべての必須条件をクリア</span>' 
-            : `<span style="color: #F57C00;">⚠ 警告 ${warningCount}件</span>`;
-        
-        const confirmButtonId = `confirm-${draftKey}`;
-        
+    // ★draft1のみ表示
+    const draft = data.drafts.draft1;
+    
+    if (!draft) {
+        resultsArea.innerHTML += '<p class="error-message">スケジュールが生成されませんでした</p>';
+        return;
+    }
+    
+    const hasCriticalErrors = draft.validation && 
+                               draft.validation.criticalErrors && 
+                               draft.validation.criticalErrors.length > 0;
+    
+    const draftDiv = document.createElement('div');
+    draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+    
+    if (hasCriticalErrors) {
         draftDiv.innerHTML = `
-            <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
-                <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type || 'タイプ不明'}</h4>
-                <div>${validationStatus}</div>
+            <div style="background: #FFEBEE; padding: 10px 15px;">
+                <h4 style="color: #D32F2F;">${draft.type || '勤務表'} ⚠️ 必須条件未達</h4>
+            </div>
+            <div style="padding: 15px; background: #FFF9F9;">
+                <p style="color: #D32F2F; font-weight: bold; margin-bottom: 10px;">
+                    ${draft.attempts || 50} 回試行しましたが、以下の必須条件が満たせませんでした:
+                </p>
+                <ul style="color: #D32F2F; margin-left: 20px;">
+                    ${draft.validation.criticalErrors.map(err => `<li>${err}</li>`).join('')}
+                </ul>
+                <p style="color: #666; margin-top: 15px; font-size: 13px;">
+                    <em>※ より多くの試行回数で再度生成するか、希望内容を調整してください。</em>
+                </p>
             </div>
         `;
-        
-        // ★警告がある場合は表示
-        if (warningCount > 0) {
-            const warningDiv = document.createElement('div');
-            warningDiv.style = "padding: 10px 15px; background: #FFF3E0; border-left: 4px solid #F57C00;";
-            warningDiv.innerHTML = `
-                <strong style="color: #E65100;">警告事項:</strong>
-                <ul style="margin: 5px 0 0 20px; color: #E65100;">
-                    ${draft.validation.warnings.map(warn => `<li>${warn}</li>`).join('')}
-                </ul>
-            `;
-            draftDiv.appendChild(warningDiv);
-        }
-        
-        // ★スケジュール表
-        const scheduleDiv = document.createElement('div');
-        scheduleDiv.style = "padding: 15px; overflow-x: auto;";
-        scheduleDiv.innerHTML = `
-            ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
-            <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-                <i class="fas fa-check"></i> この案で確定する
-            </button>
-        `;
-        draftDiv.appendChild(scheduleDiv);
-        
         resultsArea.appendChild(draftDiv);
-        
-        // ボタンのイベントリスナー
-        document.getElementById(confirmButtonId).addEventListener('click', function() {
-            confirmSchedule(draftKey);
-        });
-        enableShiftSwap(draftKey);
+        return;
+    }
+    
+    // 正常な案の表示
+    const warningCount = draft.validation?.warnings?.length || 0;
+    const validationStatus = warningCount === 0
+        ? '<span style="color: #2E7D32;">✓ すべての必須条件をクリア</span>' 
+        : `<span style="color: #F57C00;">⚠ 警告 ${warningCount}件</span>`;
+    
+    const confirmButtonId = 'confirm-draft1';
+    
+    draftDiv.innerHTML = `
+        <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="color: #5D4037;">${draft.type || '勤務表'} 
+                ${draft.attempts ? `<span style="font-size: 13px; color: #666;">(${draft.attempts}回試行、${draft.elapsedTime || '?'}秒)</span>` : ''}
+            </h4>
+            <div>${validationStatus}</div>
+        </div>
+    `;
+    
+    if (warningCount > 0) {
+        const warningDiv = document.createElement('div');
+        warningDiv.style = "padding: 10px 15px; background: #FFF3E0; border-left: 4px solid #F57C00;";
+        warningDiv.innerHTML = `
+            <strong style="color: #E65100;">警告事項:</strong>
+            <ul style="margin: 5px 0 0 20px; color: #E65100;">
+                ${draft.validation.warnings.slice(0, 10).map(warn => `<li>${warn}</li>`).join('')}
+                ${warningCount > 10 ? `<li>... 他 ${warningCount - 10} 件</li>` : ''}
+            </ul>
+        `;
+        draftDiv.appendChild(warningDiv);
+    }
+    
+    const scheduleDiv = document.createElement('div');
+    scheduleDiv.style = "padding: 15px; overflow-x: auto;";
+    scheduleDiv.innerHTML = `
+        ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
+        <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+            <i class="fas fa-check"></i> この案で確定する
+        </button>
+    `;
+    draftDiv.appendChild(scheduleDiv);
+    
+    resultsArea.appendChild(draftDiv);
+    
+    document.getElementById(confirmButtonId).addEventListener('click', function() {
+        confirmSchedule('draft1');
     });
+    
+    enableShiftSwap('draft1');
 }
 
 // ★ スケジュール表示関数をこのスコープ内に移動
