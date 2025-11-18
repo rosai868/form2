@@ -134,6 +134,81 @@
         .shift-休, .shift-年, .shift-特, .shift-夏, .shift-AM, .shift-PM { 
             background: #F5F5F5; color: #757575; 
         }
+        /* 勤務交換モーダル用スタイル */
+        .swap-candidate {
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid #E0E0E0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .swap-candidate:hover {
+            border-color: #1976D2;
+            background: #E3F2FD;
+        }
+        
+        .swap-candidate.unavailable {
+            opacity: 0.5;
+            cursor: not-allowed;
+            border-color: #FFCDD2;
+        }
+        
+        .swap-candidate.unavailable:hover {
+            border-color: #FFCDD2;
+            background: white;
+        }
+        
+        .candidate-info {
+            flex: 1;
+        }
+        
+        .candidate-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .candidate-status {
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .swap-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .swap-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .swap-btn.exchange {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .swap-btn.exchange:hover {
+            background: #388E3C;
+        }
+        
+        .swap-btn.transfer {
+            background: #FF9800;
+            color: white;
+        }
+        
+        .swap-btn.transfer:hover {
+            background: #F57C00;
+        }
     </style>
 </head>
 <body>
@@ -1400,6 +1475,7 @@ function displayScheduleResults(data, monthKey) {
         document.getElementById(confirmButtonId).addEventListener('click', function() {
             confirmSchedule(draftKey);
         });
+        enableShiftSwap(draftKey);
     });
 }
 
@@ -1804,6 +1880,295 @@ function confirmSchedule(draftKey) {
     alert(`${draftKey} が確定されました。（機能は開発中です）`);
 }
 
+let currentEditingDraft = null; // 現在編集中のdraft
+let currentEditingSchedule = null; // 現在編集中のschedule
+
+// セルクリック時の処理
+function enableShiftSwap(draftKey) {
+    currentEditingDraft = draftKey;
+    const draft = currentScheduleData.drafts[draftKey];
+    currentEditingSchedule = JSON.parse(JSON.stringify(draft.schedule)); // ディープコピー
+    
+    console.log("勤務交換モード有効化:", draftKey);
+    
+    // すべてのシフトセルにクリックイベントを追加
+    document.querySelectorAll('.schedule-table td[class^="shift-"]').forEach(cell => {
+        cell.style.cursor = 'pointer';
+        cell.addEventListener('click', handleShiftCellClick);
+    });
+}
+
+function handleShiftCellClick(event) {
+    const cell = event.target;
+    
+    // セルからスタッフと日付を特定
+    const row = cell.parentElement;
+    const rowIndex = Array.from(row.parentElement.children).indexOf(row);
+    const colIndex = Array.from(row.children).indexOf(cell);
+    
+    if (colIndex === 0) return; // 名前列はスキップ
+    
+    const date = colIndex; // 列番号 = 日付
+    const staffName = row.children[0].textContent.trim().split(' ')[0]; // 名前のみ抽出
+    
+    console.log(`クリック: ${staffName} - ${date}日`);
+    
+    // スタッフのUIDを取得
+    const staff = staffListForAdmin.find(s => s.name === staffName);
+    if (!staff) {
+        console.error("スタッフが見つかりません:", staffName);
+        return;
+    }
+    
+    const currentShift = currentEditingSchedule[staff.uid].shifts[date];
+    
+    showSwapModal(staff, date, currentShift);
+}
+
+// 交換候補モーダルを表示
+function showSwapModal(staff, date, currentShift) {
+    const modal = document.getElementById('shift-swap-modal');
+    const content = document.getElementById('swap-modal-content');
+    
+    const monthKey = currentMonth.toISOString().slice(0, 7);
+    const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), date);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+    
+    content.innerHTML = `
+        <div style="background: #F5F5F5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 10px 0; color: #5D4037;">変更対象</h4>
+            <p style="margin: 0; font-size: 16px;">
+                <strong>${staff.name}</strong> ${staff.team}チーム - 
+                <strong>${monthKey.split('-')[1]}月${date}日 (${dayOfWeek})</strong>
+            </p>
+            <p style="margin: 5px 0 0 0; color: #666;">
+                現在: <span class="shift-${currentShift}" style="padding: 4px 8px; border-radius: 4px; font-weight: bold;">${currentShift}</span>
+            </p>
+        </div>
+        
+        <h4 style="color: #5D4037; margin-bottom: 15px;">交換・譲渡候補</h4>
+        <div id="candidate-list">
+            ${generateCandidateList(staff, date, currentShift)}
+        </div>
+    `;
+    
+    modal.style.display = 'block';
+}
+
+// 候補者リストを生成
+function generateCandidateList(targetStaff, date, targetShift) {
+    const candidates = staffListForAdmin.filter(s => 
+        s.originalId !== 31 && 
+        s.uid !== targetStaff.uid &&
+        s.originalId !== 1 && 
+        s.originalId !== 2
+    );
+    
+    let html = '';
+    
+    candidates.forEach(candidate => {
+        const candidateShift = currentEditingSchedule[candidate.uid].shifts[date];
+        const canExchange = candidateShift !== null && candidateShift !== targetShift;
+        const canTransfer = true; // 譲渡は常に可能（休みに変更される）
+        
+        // 制約チェック
+        const constraints = checkSwapConstraints(targetStaff, candidate, date, targetShift, candidateShift);
+        
+        const isAvailable = constraints.canExchange || constraints.canTransfer;
+        const availableClass = isAvailable ? '' : 'unavailable';
+        
+        html += `
+            <div class="swap-candidate ${availableClass}">
+                <div class="candidate-info">
+                    <div class="candidate-name">
+                        ${candidate.name} 
+                        <span style="color: ${candidate.team === 'A' ? '#1976D2' : '#E65100'};">${candidate.team}</span>
+                        ${candidate.leader ? '<span style="color: #F57C00;">L</span>' : ''}
+                    </div>
+                    <div class="candidate-status">
+                        現在: <span class="shift-${candidateShift}">${candidateShift}</span>
+                        ${constraints.warning ? `<br><span style="color: #D32F2F;">⚠ ${constraints.warning}</span>` : ''}
+                    </div>
+                </div>
+                <div class="swap-actions">
+                    ${constraints.canExchange ? `
+                        <button class="swap-btn exchange" onclick="executeSwap('${targetStaff.uid}', '${candidate.uid}', ${date}, 'exchange')">
+                            交換
+                        </button>
+                    ` : ''}
+                    ${constraints.canTransfer ? `
+                        <button class="swap-btn transfer" onclick="executeSwap('${targetStaff.uid}', '${candidate.uid}', ${date}, 'transfer')">
+                            譲渡
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    if (html === '') {
+        html = '<p style="color: #666; text-align: center; padding: 20px;">交換・譲渡可能なスタッフがいません</p>';
+    }
+    
+    return html;
+}
+
+// 交換・譲渡の制約チェック
+function checkSwapConstraints(staffA, staffB, date, shiftA, shiftB) {
+    const result = {
+        canExchange: false,
+        canTransfer: false,
+        warning: null
+    };
+    
+    // 譲渡は基本的に常に可能
+    result.canTransfer = true;
+    
+    // 交換の場合
+    if (shiftB && shiftB !== '休') {
+        result.canExchange = true;
+        
+        // 夜勤回数チェック
+        const staffANightCount = currentEditingSchedule[staffA.uid].counts['準'] + 
+                                 currentEditingSchedule[staffA.uid].counts['夜'];
+        const staffBNightCount = currentEditingSchedule[staffB.uid].counts['準'] + 
+                                 currentEditingSchedule[staffB.uid].counts['夜'];
+        
+        const shiftAIsNight = (shiftA === '準' || shiftA === '夜');
+        const shiftBIsNight = (shiftB === '準' || shiftB === '夜');
+        
+        if (shiftAIsNight && !shiftBIsNight && staffBNightCount >= 8) {
+            result.canExchange = false;
+            result.warning = "夜勤回数上限超過";
+        }
+        
+        if (!shiftAIsNight && shiftBIsNight && staffANightCount >= 8) {
+            result.canExchange = false;
+            result.warning = "夜勤回数上限超過";
+        }
+    }
+    
+    return result;
+}
+
+// 交換・譲渡を実行
+async function executeSwap(staffAUid, staffBUid, date, mode) {
+    console.log(`${mode}: ${staffAUid} ⇔ ${staffBUid} (${date}日)`);
+    
+    const staffA = staffListForAdmin.find(s => s.uid === staffAUid);
+    const staffB = staffListForAdmin.find(s => s.uid === staffBUid);
+    
+    const shiftA = currentEditingSchedule[staffAUid].shifts[date];
+    const shiftB = currentEditingSchedule[staffBUid].shifts[date];
+    
+    if (mode === 'exchange') {
+        // 交換
+        currentEditingSchedule[staffAUid].shifts[date] = shiftB;
+        currentEditingSchedule[staffBUid].shifts[date] = shiftA;
+        
+        // カウント更新
+        currentEditingSchedule[staffAUid].counts[shiftA]--;
+        currentEditingSchedule[staffAUid].counts[shiftB]++;
+        currentEditingSchedule[staffBUid].counts[shiftB]--;
+        currentEditingSchedule[staffBUid].counts[shiftA]++;
+        
+        showMessage(`${staffA.name} と ${staffB.name} の ${date}日のシフトを交換しました`, 'success');
+        
+    } else if (mode === 'transfer') {
+        // 譲渡
+        currentEditingSchedule[staffBUid].shifts[date] = shiftA;
+        currentEditingSchedule[staffAUid].shifts[date] = '休';
+        
+        // カウント更新
+        currentEditingSchedule[staffBUid].counts[shiftB]--;
+        currentEditingSchedule[staffBUid].counts[shiftA]++;
+        currentEditingSchedule[staffAUid].counts[shiftA]--;
+        currentEditingSchedule[staffAUid].counts['休']++;
+        
+        showMessage(`${staffA.name} の ${date}日のシフトを ${staffB.name} に譲渡しました`, 'success');
+    }
+    
+    // スケジュールを再表示
+    closeSwapModal();
+    refreshScheduleDisplay();
+    
+    // Firestoreに保存
+    await saveEditedSchedule();
+}
+
+// スケジュール表示を更新
+function refreshScheduleDisplay() {
+    const monthKey = currentMonth.toISOString().slice(0, 7);
+    const draft = currentScheduleData.drafts[currentEditingDraft];
+    draft.schedule = currentEditingSchedule;
+    
+    // 該当のdraftのみ再描画
+    const draftDiv = document.querySelector(`#confirm-${currentEditingDraft}`).closest('div').parentElement;
+    const scheduleHTML = generateScheduleTableHTML(currentEditingSchedule, monthKey, staffListForAdmin);
+    
+    draftDiv.querySelector('[style*="overflow-x: auto"]').innerHTML = scheduleHTML + `
+        <button id="confirm-${currentEditingDraft}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+            <i class="fas fa-check"></i> この案で確定する
+        </button>
+    `;
+    
+    // イベントリスナー再設定
+    document.getElementById(`confirm-${currentEditingDraft}`).addEventListener('click', function() {
+        confirmSchedule(currentEditingDraft);
+    });
+    
+    // クリックイベント再設定
+    enableShiftSwap(currentEditingDraft);
+}
+
+// 編集したスケジュールをFirestoreに保存
+async function saveEditedSchedule() {
+    try {
+        const monthKey = currentMonth.toISOString().slice(0, 7);
+        
+        // Firestoreに保存
+        await db.collection('Schedules').doc(monthKey).update({
+            [`drafts.${currentEditingDraft}.schedule`]: currentEditingSchedule,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        console.log("編集したスケジュールを保存しました");
+        
+    } catch (error) {
+        console.error("スケジュール保存エラー:", error);
+        showMessage("スケジュールの保存に失敗しました", 'error');
+    }
+}
+
+// モーダルを閉じる
+function closeSwapModal() {
+    document.getElementById('shift-swap-modal').style.display = 'none';
+}
+
+// メッセージ表示
+function showMessage(message, type) {
+    const color = type === 'success' ? '#4CAF50' : '#D32F2F';
+    const messageDiv = document.createElement('div');
+    messageDiv.style = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${color};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 2000;
+        animation: slideIn 0.3s;
+    `;
+    messageDiv.textContent = message;
+    document.body.appendChild(messageDiv);
+    
+    setTimeout(() => {
+        messageDiv.remove();
+    }, 3000);
+}
+
 /* ▲▲▲ ここまで ▲▲▲ */
         } catch (error) {
             console.error('初期化エラー:', error);
@@ -1816,6 +2181,18 @@ function confirmSchedule(draftKey) {
         }
     });
     </script>
-    
+<!-- ★勤務交換モーダル -->
+<div id="shift-swap-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
+    <div style="background: white; max-width: 800px; margin: 50px auto; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="background: #1976D2; color: white; padding: 20px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0;">勤務交換・譲渡</h3>
+            <button onclick="closeSwapModal()" style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
+        </div>
+        
+        <div id="swap-modal-content" style="padding: 20px;">
+            <!-- 動的に生成 -->
+        </div>
+    </div>
+</div>    
 </body>
 </html>
