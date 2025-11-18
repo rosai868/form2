@@ -1362,8 +1362,7 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
     const [year, month] = monthKey.split("-").map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     
-    // ★希望データを取得 (グローバル変数から)
-    // allRequestsForAdmin は管理者画面で使用している希望データ
+    // ★希望データを取得
     const requestsData = allRequestsForAdmin || {};
     
     // ヘッダー
@@ -1429,7 +1428,7 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
             }
             
             // ★希望と違う場合、赤枠を追加
-            const requestedShift = staffRequestDates[dateString];
+            const requestedShift = staffRequestDates[dateString] || staffRequestDates[String(d)];
             if (requestedShift && requestedShift !== shift) {
                 cellStyle += ' border: 3px solid #D32F2F; box-sizing: border-box;';
             }
@@ -1439,12 +1438,20 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
         body += '</tr>';
     });
 
+    // ★★★ 人数カウント表を生成
     let countTable = generateCountTable(schedule, staff, daysInMonth);
+    
+    // ★★★ 個人別集計表を生成
+    let personalCountTable = generatePersonalCountTable(schedule, staff);
 
     return `
         <table class="schedule-table">${header}${body}</table>
+        
         <h4 style="margin-top: 20px; color: #5D4037;">日毎の人数集計</h4>
         ${countTable}
+        
+        <h4 style="margin-top: 20px; color: #5D4037;">個人別シフト回数集計</h4>
+        ${personalCountTable}
     `;
 }
 // ★★★ 新規追加: 人数カウント表を生成 ★★★
