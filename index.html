@@ -1398,7 +1398,6 @@ function displayScheduleResults(data, monthKey) {
         return;
     }
     
-    // ★draft1のみ表示
     const draft = data.drafts.draft1;
     
     if (!draft) {
@@ -1434,6 +1433,10 @@ function displayScheduleResults(data, monthKey) {
         return;
     }
     
+    // ========================================
+    // ★★★ ここから追加 ★★★
+    // ========================================
+    
     // 正常な案の表示
     const warningCount = draft.validation?.warnings?.length || 0;
     const validationStatus = warningCount === 0
@@ -1445,7 +1448,7 @@ function displayScheduleResults(data, monthKey) {
     draftDiv.innerHTML = `
         <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
             <h4 style="color: #5D4037;">${draft.type || '勤務表'} 
-                ${draft.attempts ? `<span style="font-size: 13px; color: #666;">(${draft.attempts}回試行、${draft.elapsedTime || '?'}秒)</span>` : ''}
+                ${draft.attempts ? `<span style="font-size: 13px; color: #666;">(${draft.attempts}回試行、${draft.elapsedTime || '?'}秒、スコア: ${draft.score || '?'})</span>` : ''}
             </h4>
             <div>${validationStatus}</div>
         </div>
@@ -1482,7 +1485,6 @@ function displayScheduleResults(data, monthKey) {
     
     enableShiftSwap('draft1');
 }
-
 // ★ スケジュール表示関数をこのスコープ内に移動
 function generateScheduleTableHTML(schedule, monthKey, staff) {
     console.log("=== generateScheduleTableHTML 開始 ===");
