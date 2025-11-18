@@ -15,7 +15,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        /* (CSSは変更なし) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: "Yu Gothic", YuGothic, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; background: #FFFBF7; padding: 20px; color: #5D4037; }
         .container { max-width: 1200px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 30px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07); border: 1px solid #F0EAE4; }
@@ -95,9 +94,6 @@
         .logout-button:hover { background: #FF8A65; }
         .password-change-button { background: #FFD54F; color: #5D4037; margin-top: 10px; }
         .password-change-button:hover { background: #FFCA28; }
-        .sync-status { position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; background: #66BB6A; color: white; border-radius: 20px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .sync-status.offline { background: #EF5350; }
-        .sync-status.syncing { background: #FFA726; }
         
         .schedule-table {
             width: 100%;
@@ -134,7 +130,7 @@
         .shift-休, .shift-年, .shift-特, .shift-夏, .shift-AM, .shift-PM { 
             background: #F5F5F5; color: #757575; 
         }
-        /* 勤務交換モーダル用スタイル */
+        
         .swap-candidate {
             padding: 12px;
             margin: 8px 0;
@@ -209,6 +205,7 @@
         .swap-btn.transfer:hover {
             background: #F57C00;
         }
+        
         @keyframes slideIn {
             from {
                 transform: translateX(400px);
@@ -372,7 +369,7 @@
                 勤務表 自動作成
             </h3>
             <p style="font-size: 13px; color: #777; margin-bottom: 15px;">
-                現在表示中の月（YYYY年MM月）の希望データを基に、勤務表の案を3パターン作成します。<br>
+                現在表示中の月（YYYY年MM月）の希望データを基に、勤務表の案を作成します。<br>
                 処理には数分かかる場合があります。
             </p>
             
@@ -380,8 +377,7 @@
                 <i class="fas fa-magic"></i> 勤務表の作成を開始
             </button>
             
-            <div id="schedule-results" style="margin-top: 20px;">
-                </div>
+            <div id="schedule-results" style="margin-top: 20px;"></div>
         </div>
         
         <div style="margin-top: 30px; padding: 20px; background: #F8F8F8; border: 1px solid #F0EAE4; border-radius: 8px; font-size: 13px; color: #777;">
@@ -395,7 +391,21 @@
         
         <button onclick="showChangePasswordForm()" class="logout-button password-change-button">パスワードを変更する</button>
         <button onclick="logout()" class="logout-button">ログアウト</button>
-    </div> 
+    </div>
+
+    <!-- ★勤務交換モーダル -->
+    <div id="shift-swap-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
+        <div style="background: white; max-width: 800px; margin: 50px auto; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <div style="background: #1976D2; color: white; padding: 20px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0;">勤務交換・譲渡</h3>
+                <button onclick="closeSwapModal()" style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
+            </div>
+            
+            <div id="swap-modal-content" style="padding: 20px;">
+                <!-- 動的に生成 -->
+            </div>
+        </div>
+    </div>
 
     <script>
     // ============================================
@@ -404,7 +414,6 @@
     
     let auth = null;      
     let firestore = null; 
-    let db = null;        
 
     function initializeFirebase() {
         try {
@@ -417,10 +426,8 @@
             firebase.initializeApp(firebaseConfig);
             auth = firebase.auth();
             firestore = firebase.firestore();
+            firestore.settings({ persistence: false });
 
-            firestore.settings({ persistence: false }); // ★ キャッシュ無効化
-
-            // db = firebase.database(); // ★ 修正 ★ (フリーズ原因のため無効化)
             console.log('Firebase初期化成功 (Auth, Firestore)');
             return true;
         } catch (error) {
@@ -443,15 +450,319 @@
     let currentMonth = new Date();
     let selectedDates = {};
     let selectedRequestType = null;
-    
-    let originalSelectedDates = {}; // ★ ログアウト警告用
-    
+    let originalSelectedDates = {};
     let staffListForAdmin = []; 
     let allRequestsForAdmin = {}; 
+    let currentScheduleData = null;
+    let currentEditingDraft = null;
+    let currentEditingSchedule = null;
 
-    let currentScheduleData = null; // 現在表示中のスケジュールデータ
-    let currentEditingDraft = null; // 現在編集中のdraft
-    let currentEditingSchedule = null; // 現在編集中のschedule
+    // ============================================
+    // ★★★ 勤務交換関連の関数（グローバルスコープ） ★★★
+    // ============================================
+
+    function closeSwapModal() {
+        document.getElementById('shift-swap-modal').style.display = 'none';
+    }
+
+    function enableShiftSwap(draftKey) {
+        if (!currentScheduleData || !currentScheduleData.drafts) {
+            console.error("currentScheduleData が存在しません");
+            return;
+        }
+        
+        if (!currentScheduleData.drafts[draftKey]) {
+            console.error(`draft ${draftKey} が見つかりません`);
+            return;
+        }
+        
+        currentEditingDraft = draftKey;
+        const draft = currentScheduleData.drafts[draftKey];
+        currentEditingSchedule = JSON.parse(JSON.stringify(draft.schedule));
+        
+        console.log("勤務交換モード有効化:", draftKey);
+        
+        document.querySelectorAll('.schedule-table td[class^="shift-"]').forEach(cell => {
+            cell.style.cursor = 'pointer';
+            cell.removeEventListener('click', handleShiftCellClick);
+            cell.addEventListener('click', handleShiftCellClick);
+        });
+    }
+
+    function handleShiftCellClick(event) {
+        const cell = event.target;
+        console.log("セルクリック:", cell);
+        
+        const row = cell.parentElement;
+        const colIndex = Array.from(row.children).indexOf(cell);
+        
+        if (colIndex === 0) {
+            console.log("名前列をクリック（スキップ）");
+            return;
+        }
+        
+        const date = colIndex;
+        const staffNameCell = row.children[0].textContent.trim();
+        const staffName = staffNameCell.split(' ')[0];
+        
+        console.log(`クリック: ${staffName} - ${date}日`);
+        
+        const staff = staffListForAdmin.find(s => s.name === staffName);
+        if (!staff) {
+            console.error("スタッフが見つかりません:", staffName);
+            showMessage("スタッフ情報が見つかりません: " + staffName, 'error');
+            return;
+        }
+        
+        const currentShift = currentEditingSchedule[staff.uid].shifts[date];
+        console.log(`現在のシフト: ${currentShift}`);
+        
+        showSwapModal(staff, date, currentShift);
+    }
+
+    function showSwapModal(staff, date, currentShift) {
+        const modal = document.getElementById('shift-swap-modal');
+        const content = document.getElementById('swap-modal-content');
+        
+        const monthKey = currentMonth.toISOString().slice(0, 7);
+        const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), date);
+        const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+        
+        content.innerHTML = `
+            <div style="background: #F5F5F5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 10px 0; color: #5D4037;">変更対象</h4>
+                <p style="margin: 0; font-size: 16px;">
+                    <strong>${staff.name}</strong> ${staff.team}チーム - 
+                    <strong>${monthKey.split('-')[1]}月${date}日 (${dayOfWeek})</strong>
+                </p>
+                <p style="margin: 5px 0 0 0; color: #666;">
+                    現在: <span class="shift-${currentShift}" style="padding: 4px 8px; border-radius: 4px; font-weight: bold;">${currentShift}</span>
+                </p>
+            </div>
+            
+            <h4 style="color: #5D4037; margin-bottom: 15px;">交換・譲渡候補</h4>
+            <div id="candidate-list">
+                ${generateCandidateList(staff, date, currentShift)}
+            </div>
+        `;
+        
+        modal.style.display = 'block';
+    }
+
+    function generateCandidateList(targetStaff, date, targetShift) {
+        const candidates = staffListForAdmin.filter(s => 
+            s.originalId !== 31 && 
+            s.uid !== targetStaff.uid &&
+            s.originalId !== 1 && 
+            s.originalId !== 2
+        );
+        
+        let html = '';
+        
+        candidates.forEach(candidate => {
+            const candidateShift = currentEditingSchedule[candidate.uid].shifts[date];
+            const constraints = checkSwapConstraints(targetStaff, candidate, date, targetShift, candidateShift);
+            
+            const isAvailable = constraints.canExchange || constraints.canTransfer;
+            const availableClass = isAvailable ? '' : 'unavailable';
+            
+            html += `
+                <div class="swap-candidate ${availableClass}">
+                    <div class="candidate-info">
+                        <div class="candidate-name">
+                            ${candidate.name} 
+                            <span style="color: ${candidate.team === 'A' ? '#1976D2' : '#E65100'};">${candidate.team}</span>
+                            ${candidate.leader ? '<span style="color: #F57C00;">L</span>' : ''}
+                        </div>
+                        <div class="candidate-status">
+                            現在: <span class="shift-${candidateShift}">${candidateShift}</span>
+                            ${constraints.warning ? `<br><span style="color: #D32F2F;">⚠ ${constraints.warning}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="swap-actions">
+                        ${constraints.canExchange ? `
+                            <button class="swap-btn exchange" onclick="executeSwap('${targetStaff.uid}', '${candidate.uid}', ${date}, 'exchange')">
+                                交換
+                            </button>
+                        ` : ''}
+                        ${constraints.canTransfer ? `
+                            <button class="swap-btn transfer" onclick="executeSwap('${targetStaff.uid}', '${candidate.uid}', ${date}, 'transfer')">
+                                譲渡
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        if (html === '') {
+            html = '<p style="color: #666; text-align: center; padding: 20px;">交換・譲渡可能なスタッフがいません</p>';
+        }
+        
+        return html;
+    }
+
+    function checkSwapConstraints(staffA, staffB, date, shiftA, shiftB) {
+        const result = {
+            canExchange: false,
+            canTransfer: false,
+            warning: null
+        };
+        
+        result.canTransfer = true;
+        
+        if (shiftB && shiftB !== '休') {
+            result.canExchange = true;
+            
+            const staffANightCount = currentEditingSchedule[staffA.uid].counts['準'] + 
+                                     currentEditingSchedule[staffA.uid].counts['夜'];
+            const staffBNightCount = currentEditingSchedule[staffB.uid].counts['準'] + 
+                                     currentEditingSchedule[staffB.uid].counts['夜'];
+            
+            const shiftAIsNight = (shiftA === '準' || shiftA === '夜');
+            const shiftBIsNight = (shiftB === '準' || shiftB === '夜');
+            
+            if (shiftAIsNight && !shiftBIsNight && staffBNightCount >= 8) {
+                result.canExchange = false;
+                result.warning = "夜勤回数上限超過";
+            }
+            
+            if (!shiftAIsNight && shiftBIsNight && staffANightCount >= 8) {
+                result.canExchange = false;
+                result.warning = "夜勤回数上限超過";
+            }
+        }
+        
+        return result;
+    }
+
+    async function executeSwap(staffAUid, staffBUid, date, mode) {
+        console.log(`${mode}: ${staffAUid} ⇔ ${staffBUid} (${date}日)`);
+        
+        if (!staffListForAdmin || staffListForAdmin.length === 0) {
+            console.error("staffListForAdmin が存在しません");
+            showMessage("スタッフ情報の読み込みに失敗しました", 'error');
+            return;
+        }
+        
+        const staffA = staffListForAdmin.find(s => s.uid === staffAUid);
+        const staffB = staffListForAdmin.find(s => s.uid === staffBUid);
+        
+        if (!staffA || !staffB) {
+            console.error("スタッフが見つかりません", staffAUid, staffBUid);
+            showMessage("スタッフ情報が見つかりません", 'error');
+            return;
+        }
+        
+        const shiftA = currentEditingSchedule[staffAUid].shifts[date];
+        const shiftB = currentEditingSchedule[staffBUid].shifts[date];
+        
+        console.log(`変更前: ${staffA.name}=${shiftA}, ${staffB.name}=${shiftB}`);
+        
+        if (mode === 'exchange') {
+            currentEditingSchedule[staffAUid].shifts[date] = shiftB;
+            currentEditingSchedule[staffBUid].shifts[date] = shiftA;
+            
+            currentEditingSchedule[staffAUid].counts[shiftA]--;
+            currentEditingSchedule[staffAUid].counts[shiftB]++;
+            currentEditingSchedule[staffBUid].counts[shiftB]--;
+            currentEditingSchedule[staffBUid].counts[shiftA]++;
+            
+            showMessage(`${staffA.name} と ${staffB.name} の ${date}日のシフトを交換しました`, 'success');
+            
+        } else if (mode === 'transfer') {
+            currentEditingSchedule[staffBUid].shifts[date] = shiftA;
+            currentEditingSchedule[staffAUid].shifts[date] = '休';
+            
+            if (shiftB && currentEditingSchedule[staffBUid].counts[shiftB] !== undefined) {
+                currentEditingSchedule[staffBUid].counts[shiftB]--;
+            }
+            currentEditingSchedule[staffBUid].counts[shiftA]++;
+            currentEditingSchedule[staffAUid].counts[shiftA]--;
+            currentEditingSchedule[staffAUid].counts['休']++;
+            
+            showMessage(`${staffA.name} の ${date}日のシフトを ${staffB.name} に譲渡しました`, 'success');
+        }
+        
+        console.log(`変更後: ${staffA.name}=${currentEditingSchedule[staffAUid].shifts[date]}, ${staffB.name}=${currentEditingSchedule[staffBUid].shifts[date]}`);
+        
+        closeSwapModal();
+        refreshScheduleDisplay();
+        
+        await saveEditedSchedule();
+    }
+
+    function refreshScheduleDisplay() {
+        const monthKey = currentMonth.toISOString().slice(0, 7);
+        
+        if (!currentScheduleData || !currentScheduleData.drafts) {
+            console.error("currentScheduleData が存在しません");
+            return;
+        }
+        
+        const draft = currentScheduleData.drafts[currentEditingDraft];
+        if (!draft) {
+            console.error(`draft ${currentEditingDraft} が見つかりません`);
+            return;
+        }
+        
+        draft.schedule = currentEditingSchedule;
+        
+        const resultsArea = document.getElementById('schedule-results');
+        resultsArea.innerHTML = '';
+        
+        displayScheduleResults(currentScheduleData, monthKey);
+    }
+
+    async function saveEditedSchedule() {
+        try {
+            const monthKey = currentMonth.toISOString().slice(0, 7);
+            
+            console.log("スケジュール保存開始:", monthKey, currentEditingDraft);
+            
+            await firestore.collection('Schedules').doc(monthKey).update({
+                [`drafts.${currentEditingDraft}.schedule`]: currentEditingSchedule,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            console.log("✅ 編集したスケジュールを保存しました");
+            
+        } catch (error) {
+            console.error("❌ スケジュール保存エラー:", error);
+            showMessage("スケジュールの保存に失敗しました: " + error.message, 'error');
+        }
+    }
+
+    function showMessage(message, type) {
+        const color = type === 'success' ? '#4CAF50' : '#D32F2F';
+        const icon = type === 'success' ? '✓' : '✗';
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${color};
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            font-size: 14px;
+            max-width: 400px;
+            animation: slideIn 0.3s ease-out;
+        `;
+        messageDiv.innerHTML = `<strong>${icon}</strong> ${message}`;
+        document.body.appendChild(messageDiv);
+        
+        setTimeout(() => {
+            messageDiv.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 300);
+        }, 3000);
+    }
+
     // ============================================
     // ログイン関連
     // ============================================
@@ -461,7 +772,7 @@
         const password = document.getElementById('password').value;
         const loginButton = document.getElementById('loginButton');
         
-        const email = `${userId}@7w.com`; // ★ ドメイン名を確認
+        const email = `${userId}@7w.com`;
 
         loginButton.disabled = true;
         loginButton.textContent = 'ログイン中...';
@@ -596,9 +907,7 @@
         document.getElementById('mainSection').classList.add('hidden');
         document.getElementById('adminSection').classList.add('hidden');
         document.getElementById('changePasswordSection').classList.add('hidden');
-        // document.getElementById('syncStatus').classList.add('hidden'); // ★ 修正 ★
     }
-
 
     // ============================================
     // 画面表示
@@ -614,7 +923,6 @@
         document.getElementById('changePasswordSection').classList.add('hidden');
         document.getElementById('adminSection').classList.add('hidden');
         document.getElementById('mainSection').classList.remove('hidden');
-        // document.getElementById('syncStatus').classList.remove('hidden'); // ★ 修正 ★
         
         document.getElementById('welcomeMessage').textContent = currentUser.name + 'さん、お疲れ様です！';
 
@@ -632,12 +940,10 @@
         await updateSubmissionStatus();
     }
 
-
     async function showAdminSection() {
         document.getElementById('loginSection').classList.add('hidden');
         document.getElementById('mainSection').classList.add('hidden');
         document.getElementById('adminSection').classList.remove('hidden');
-        // document.getElementById('syncStatus').classList.remove('hidden'); // ★ 修正 ★
         
         currentMonth = new Date();
         
@@ -729,7 +1035,6 @@
             calendarElement.appendChild(dayElement);
         }
     }
-
 
     function formatDate(date) {
         const year = date.getFullYear();
@@ -868,11 +1173,11 @@
                 await docRef.set({ [staffUid]: data }, { merge: true });
                 console.log('希望データ保存完了 (set):', monthKey, staffUid);
             } else {
-                console.error('希望データ保存エラー:', error);
-                throw error;
+                console.error('希望データ保存エラー:', error);
+                throw error;
             }
-        }
-    }
+        }
+    }
 
     async function loadUserRequests() {
         const year = currentMonth.getFullYear();
@@ -990,7 +1295,6 @@
         }
     }
 
-
     function previousMonth() {
         alert('前月の希望入力期間は終了しています');
     }
@@ -998,7 +1302,6 @@
     function nextMonth() {
         alert('翌月の希望入力期間はまだ開始されていません');
     }
-
 
     // ============================================
     // 管理者機能
@@ -1076,7 +1379,6 @@
         }
     }
 
-
     async function showPreviousMonth() {
         currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
         await renderAdminTable();
@@ -1127,24 +1429,9 @@
     }
 
     // ============================================
-    // ★ 新機能： スケジュール案の表示
-    // ============================================
-    
-    // (★ 修正 ★ これらの関数は DOMContentLoaded の中で定義します)
-    
-    // ============================================
     // 初期化処理
     // ============================================
     
-    function updateSyncStatus(status) {
-        // (★ 修正 ★ 機能無効化)
-    }
-
-    function setupRealtimeSync() {
-        // (★ 修正 ★ 機能無効化)
-    }
-
-    // ★ 修正 ★ DOMContentLoaded の中身を整理
     window.addEventListener('DOMContentLoaded', async function() {
         console.log('ページ読み込み完了');
         
@@ -1158,8 +1445,6 @@
         }
         
         try {
-            // setupRealtimeSync(); // (無効化)
-            
             document.getElementById('loadingSection').classList.add('hidden');
             document.getElementById('loginSection').classList.remove('hidden');
             
@@ -1175,1100 +1460,650 @@
                     event.returnValue = ''; 
                 }
             });
+
+            // モーダルの外側クリックで閉じる
+            const modal = document.getElementById('shift-swap-modal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeSwapModal();
+                    }
+                });
+            }
             
             console.log('システム初期化完了');
 
-           /* ▼▼▼ GAS 呼び出しと結果表示の関数を、すべてこのスコープ内に定義 ▼▼▼ */
+            // ============================================
+            // GAS呼び出しと結果表示
+            // ============================================
 
-const generateBtn = document.getElementById('generate-schedule-btn');
-const resultsArea = document.getElementById('schedule-results');
-const testBtn = document.getElementById('gasTestButton'); 
+            const generateBtn = document.getElementById('generate-schedule-btn');
+            const resultsArea = document.getElementById('schedule-results');
+            const testBtn = document.getElementById('gasTestButton'); 
 
-// ★★★ ここはあなたのGASのURLに書き換えてください ★★★
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwga1qFM9TnrW7OC1sFX0jVxkIuUkU4CfDZfkBfMotztNKG6fX2bfd4AwNXpo8_Y1t9nQ/exec"; 
+            const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwga1qFM9TnrW7OC1sFX0jVxkIuUkU4CfDZfkBfMotztNKG6fX2bfd4AwNXpo8_Y1t9nQ/exec"; 
 
-// JSONP実行関数
-function callGASWithJSONP(url) {
-    return new Promise((resolve, reject) => {
-        const callbackName = 'gasCallback_' + Date.now();
-        const script = document.createElement('script');
-        
-        // タイムアウト設定（30秒）
-        const timeout = setTimeout(() => {
-            delete window[callbackName];
-            document.body.removeChild(script);
-            reject(new Error('リクエストがタイムアウトしました'));
-        }, 30000);
-        
-        // コールバック関数を設定
-        window[callbackName] = function(data) {
-            clearTimeout(timeout);
-            delete window[callbackName];
-            document.body.removeChild(script);
-            resolve(data);
-        };
-        
-        // エラーハンドリング
-        script.onerror = function() {
-            clearTimeout(timeout);
-            delete window[callbackName];
-            document.body.removeChild(script);
-            reject(new Error('スクリプトの読み込みに失敗しました'));
-        };
-        
-        // URLにコールバックパラメータを追加
-        const separator = url.includes('?') ? '&' : '?';
-        script.src = url + separator + 'callback=' + callbackName;
-        
-        // スクリプトを追加
-        document.body.appendChild(script);
-    });
-}
-
-// GAS接続テストボタンの処理
-if (testBtn) {
-    testBtn.addEventListener('click', async () => {
-        alert("GAS接続テスト(JSONP)を開始します...");
-        resultsArea.innerHTML = '<p style="color: #00897B;">GASに接続テスト中...</p>';
-        
-        try {
-            const url = GAS_API_URL + "?action=test&v=" + new Date().getTime();
-            const data = await callGASWithJSONP(url);
-            
-            console.log("テスト成功:", data);
-            alert("接続成功: " + data.message);
-            resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">接続成功: ${data.message}</p>`;
-            
-        } catch (error) {
-            console.error("テストエラー:", error);
-            alert("接続エラー: " + error.message);
-            resultsArea.innerHTML = `<p class="error-message">接続エラー: ${error.message}</p>`;
-        }
-    });
-}
-
-// 勤務表作成ボタンの処理
-// 勤務表作成ボタンの処理
-generateBtn.addEventListener('click', async () => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth() + 1;
-    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
-
-    if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？`)) {
-        return;
-    }
-
-    generateBtn.disabled = true;
-    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ジョブを登録中...';
-    resultsArea.innerHTML = '<p style="color: #00897B;">処理を開始しています...</p>';
-
-    try {
-        // ステップ1: ジョブ登録
-        const createUrl = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
-        console.log("ジョブ登録URL:", createUrl);
-        
-        const createResult = await callGASWithJSONP(createUrl);
-        console.log("ジョブ登録結果:", createResult);
-        
-        if (!createResult.success) {
-            throw new Error(createResult.message);
-        }
-
-        const jobId = createResult.jobId; // 例: "schedule_2025-12"
-        console.log("ジョブID:", jobId);
-
-        // ステップ2: ジョブ状態をポーリング (定期的にチェック)
-        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 処理中...';
-        resultsArea.innerHTML = `
-            <p style="color: #00897B;">
-                <i class="fas fa-cog fa-spin"></i> スケジュールを生成中です...<br>
-                <span style="font-size: 12px;">この処理には数分かかることがあります。しばらくお待ちください。</span>
-            </p>
-        `;
-
-        const scheduleData = await pollJobStatus(jobId, monthKey);
-        
-        // ステップ3: 結果を表示
-        displayScheduleResults(scheduleData, monthKey);
-        
-    } catch (error) {
-        console.error('詳細エラー:', error);
-        resultsArea.innerHTML = `
-            <div style="background: #FFEBEE; padding: 15px; border-radius: 8px;">
-                <p class="error-message">エラーが発生しました</p>
-                <p style="font-size: 12px; color: #666; margin-top: 10px;">
-                    ${error.message}
-                </p>
-            </div>
-        `;
-    } finally {
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
-    }
-});
-
-// ★★★ 新規追加: ジョブ状態をポーリングする関数 ★★★
-async function pollJobStatus(jobId, monthKey) {
-    const maxAttempts = 60;
-    const interval = 5000;
-    let attempt = 0;
-
-    while (attempt < maxAttempts) {
-        attempt++;
-        console.log(`ポーリング ${attempt}/${maxAttempts}...`);
-
-        try {
-            const statusUrl = `${GAS_API_URL}?action=checkJob&jobId=${jobId}&v=${new Date().getTime()}`;
-            const statusResult = await callGASWithJSONP(statusUrl);
-            
-            console.log("ジョブ状態:", statusResult);
-
-            if (!statusResult.success) {
-                throw new Error("ジョブ状態の確認に失敗しました");
+            function callGASWithJSONP(url) {
+                return new Promise((resolve, reject) => {
+                    const callbackName = 'gasCallback_' + Date.now();
+                    const script = document.createElement('script');
+                    
+                    const timeout = setTimeout(() => {
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        reject(new Error('リクエストがタイムアウトしました'));
+                    }, 30000);
+                    
+                    window[callbackName] = function(data) {
+                        clearTimeout(timeout);
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        resolve(data);
+                    };
+                    
+                    script.onerror = function() {
+                        clearTimeout(timeout);
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                        reject(new Error('スクリプトの読み込みに失敗しました'));
+                    };
+                    
+                    const separator = url.includes('?') ? '&' : '?';
+                    script.src = url + separator + 'callback=' + callbackName;
+                    
+                    document.body.appendChild(script);
+                });
             }
 
-            const status = statusResult.status;
-
-            if (status === "completed") {
-                console.log("処理完了!結果を取得します...");
-                const scheduleUrl = `${GAS_API_URL}?action=getSchedule&month=${monthKey}&v=${new Date().getTime()}`;
-                const scheduleResult = await callGASWithJSONP(scheduleUrl);
-                
-                // ★★★ デバッグ: 取得したデータを詳細に出力 ★★★
-                console.log("=== スケジュール取得結果 (全体) ===");
-                console.log(scheduleResult);
-                
-                console.log("=== scheduleResult.data ===");
-                console.log(scheduleResult.data);
-                
-                console.log("=== scheduleResult.data.drafts ===");
-                console.log(scheduleResult.data.drafts);
-                
-                if (scheduleResult.data && scheduleResult.data.drafts) {
-                    console.log("=== draft1 ===");
-                    console.log(scheduleResult.data.drafts.draft1);
+            if (testBtn) {
+                testBtn.addEventListener('click', async () => {
+                    alert("GAS接続テスト(JSONP)を開始します...");
+                    resultsArea.innerHTML = '<p style="color: #00897B;">GASに接続テスト中...</p>';
                     
-                    if (scheduleResult.data.drafts.draft1 && scheduleResult.data.drafts.draft1.schedule) {
-                        console.log("=== draft1.schedule (最初の3人分) ===");
-                        let count = 0;
-                        for (let uid in scheduleResult.data.drafts.draft1.schedule) {
-                            if (count >= 3) break;
-                            console.log(`UID: ${uid}`, scheduleResult.data.drafts.draft1.schedule[uid]);
-                            count++;
+                    try {
+                        const url = GAS_API_URL + "?action=test&v=" + new Date().getTime();
+                        const data = await callGASWithJSONP(url);
+                        
+                        console.log("テスト成功:", data);
+                        alert("接続成功: " + data.message);
+                        resultsArea.innerHTML = `<p style="color: #059669; font-weight: 600;">接続成功: ${data.message}</p>`;
+                        
+                    } catch (error) {
+                        console.error("テストエラー:", error);
+                        alert("接続エラー: " + error.message);
+                        resultsArea.innerHTML = `<p class="error-message">接続エラー: ${error.message}</p>`;
+                    }
+                });
+            }
+
+            generateBtn.addEventListener('click', async () => {
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth() + 1;
+                const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+
+                if (!confirm(`${year}年${month}月 の勤務表の作成を開始しますか？`)) {
+                    return;
+                }
+
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ジョブを登録中...';
+                resultsArea.innerHTML = '<p style="color: #00897B;">処理を開始しています...</p>';
+
+                try {
+                    const createUrl = `${GAS_API_URL}?action=create&month=${monthKey}&v=${new Date().getTime()}`;
+                    console.log("ジョブ登録URL:", createUrl);
+                    
+                    const createResult = await callGASWithJSONP(createUrl);
+                    console.log("ジョブ登録結果:", createResult);
+                    
+                    if (!createResult.success) {
+                        throw new Error(createResult.message);
+                    }
+
+                    const jobId = createResult.jobId;
+                    console.log("ジョブID:", jobId);
+
+                    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 処理中...';
+                    resultsArea.innerHTML = `
+                        <p style="color: #00897B;">
+                            <i class="fas fa-cog fa-spin"></i> スケジュールを生成中です...<br>
+                            <span style="font-size: 12px;">この処理には数分かかることがあります。しばらくお待ちください。</span>
+                        </p>
+                    `;
+
+                    const scheduleData = await pollJobStatus(jobId, monthKey);
+                    
+                    displayScheduleResults(scheduleData, monthKey);
+                    
+                } catch (error) {
+                    console.error('詳細エラー:', error);
+                    resultsArea.innerHTML = `
+                        <div style="background: #FFEBEE; padding: 15px; border-radius: 8px;">
+                            <p class="error-message">エラーが発生しました</p>
+                            <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                                ${error.message}
+                            </p>
+                        </div>
+                    `;
+                } finally {
+                    generateBtn.disabled = false;
+                    generateBtn.innerHTML = '<i class="fas fa-magic"></i> 勤務表の作成を開始';
+                }
+            });
+
+            async function pollJobStatus(jobId, monthKey) {
+                const maxAttempts = 60;
+                const interval = 5000;
+                let attempt = 0;
+
+                while (attempt < maxAttempts) {
+                    attempt++;
+                    console.log(`ポーリング ${attempt}/${maxAttempts}...`);
+
+                    try {
+                        const statusUrl = `${GAS_API_URL}?action=checkJob&jobId=${jobId}&v=${new Date().getTime()}`;
+                        const statusResult = await callGASWithJSONP(statusUrl);
+                        
+                        console.log("ジョブ状態:", statusResult);
+
+                        if (!statusResult.success) {
+                            throw new Error("ジョブ状態の確認に失敗しました");
                         }
+
+                        const status = statusResult.status;
+
+                        if (status === "completed") {
+                            console.log("処理完了!結果を取得します...");
+                            const scheduleUrl = `${GAS_API_URL}?action=getSchedule&month=${monthKey}&v=${new Date().getTime()}`;
+                            const scheduleResult = await callGASWithJSONP(scheduleUrl);
+                            
+                            if (!scheduleResult.success) {
+                                throw new Error("スケジュールの取得に失敗しました: " + scheduleResult.message);
+                            }
+
+                            return scheduleResult.data;
+
+                        } else if (status === "failed") {
+                            throw new Error("スケジュール生成に失敗しました");
+
+                        } else if (status === "processing" || status === "pending") {
+                            resultsArea.innerHTML = `
+                                <p style="color: #00897B;">
+                                    <i class="fas fa-cog fa-spin"></i> 処理中... (${attempt * interval / 1000}秒経過)<br>
+                                    <span style="font-size: 12px;">ステータス: ${status}</span>
+                                </p>
+                            `;
+                            await sleep(interval);
+                            continue;
+
+                        } else {
+                            throw new Error("不明なステータス: " + status);
+                        }
+
+                    } catch (error) {
+                        console.error("ポーリングエラー:", error);
+                        if (attempt >= maxAttempts) {
+                            throw new Error("タイムアウト: 処理に時間がかかりすぎています");
+                        }
+                        await sleep(interval);
                     }
                 }
+
+                throw new Error("タイムアウト: 処理が完了しませんでした");
+            }
+
+            function sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+
+            function displayScheduleResults(data, monthKey) {
+                currentScheduleData = data;
                 
-                if (!scheduleResult.success) {
-                    throw new Error("スケジュールの取得に失敗しました: " + scheduleResult.message);
-                }
-
-                return scheduleResult.data;
-
-            } else if (status === "failed") {
-                throw new Error("スケジュール生成に失敗しました");
-
-            } else if (status === "processing" || status === "pending") {
                 resultsArea.innerHTML = `
-                    <p style="color: #00897B;">
-                        <i class="fas fa-cog fa-spin"></i> 処理中... (${attempt * interval / 1000}秒経過)<br>
-                        <span style="font-size: 12px;">ステータス: ${status}</span>
-                    </p>
+                    <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="color: #2E7D32; margin-bottom: 10px;">
+                            <i class="fas fa-check-circle"></i> ${monthKey} の勤務表が生成されました
+                        </h4>
+                    </div>
                 `;
-                await sleep(interval);
-                continue;
-
-            } else {
-                throw new Error("不明なステータス: " + status);
-            }
-
-        } catch (error) {
-            console.error("ポーリングエラー:", error);
-            if (attempt >= maxAttempts) {
-                throw new Error("タイムアウト: 処理に時間がかかりすぎています");
-            }
-            await sleep(interval);
-        }
-    }
-
-    throw new Error("タイムアウト: 処理が完了しませんでした");
-}
-
-// ★★★ 新規追加: スリープ関数 ★★★
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ★ スケジュール表示関数をこのスコープ内に移動
-// ★ スケジュール表示関数を修正
-function displayScheduleResults(data, monthKey) {
-    currentScheduleData = data;
-    
-    const resultsArea = document.getElementById('schedule-results');
-    
-    resultsArea.innerHTML = `
-        <div style="background: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <h4 style="color: #2E7D32; margin-bottom: 10px;">
-                <i class="fas fa-check-circle"></i> ${monthKey} の勤務表が生成されました
-            </h4>
-        </div>
-    `;
-    
-    if (!data || !data.drafts) {
-        resultsArea.innerHTML += '<p class="error-message">スケジュールデータが見つかりません</p>';
-        return;
-    }
-    
-    const draft = data.drafts.draft1;
-    
-    if (!draft) {
-        resultsArea.innerHTML += '<p class="error-message">スケジュールが生成されませんでした</p>';
-        return;
-    }
-    
-    const hasCriticalErrors = draft.validation && 
-                               draft.validation.criticalErrors && 
-                               draft.validation.criticalErrors.length > 0;
-    
-    const draftDiv = document.createElement('div');
-    draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
-    
-    if (hasCriticalErrors) {
-        draftDiv.innerHTML = `
-            <div style="background: #FFEBEE; padding: 10px 15px;">
-                <h4 style="color: #D32F2F;">${draft.type || '勤務表'} ⚠️ 必須条件未達</h4>
-            </div>
-            <div style="padding: 15px; background: #FFF9F9;">
-                <p style="color: #D32F2F; font-weight: bold; margin-bottom: 10px;">
-                    ${draft.attempts || 50} 回試行しましたが、以下の必須条件が満たせませんでした:
-                </p>
-                <ul style="color: #D32F2F; margin-left: 20px;">
-                    ${draft.validation.criticalErrors.map(err => `<li>${err}</li>`).join('')}
-                </ul>
-                <p style="color: #666; margin-top: 15px; font-size: 13px;">
-                    <em>※ より多くの試行回数で再度生成するか、希望内容を調整してください。</em>
-                </p>
-            </div>
-        `;
-        resultsArea.appendChild(draftDiv);
-        return;
-    }
-    
-    // ========================================
-    // ★★★ ここから追加 ★★★
-    // ========================================
-    
-    // 正常な案の表示
-    const warningCount = draft.validation?.warnings?.length || 0;
-    const validationStatus = warningCount === 0
-        ? '<span style="color: #2E7D32;">✓ すべての必須条件をクリア</span>' 
-        : `<span style="color: #F57C00;">⚠ 警告 ${warningCount}件</span>`;
-    
-    const confirmButtonId = 'confirm-draft1';
-    
-    draftDiv.innerHTML = `
-        <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
-            <h4 style="color: #5D4037;">${draft.type || '勤務表'} 
-                ${draft.attempts ? `<span style="font-size: 13px; color: #666;">(${draft.attempts}回試行、${draft.elapsedTime || '?'}秒、スコア: ${draft.score || '?'})</span>` : ''}
-            </h4>
-            <div>${validationStatus}</div>
-        </div>
-    `;
-    
-    if (warningCount > 0) {
-        const warningDiv = document.createElement('div');
-        warningDiv.style = "padding: 10px 15px; background: #FFF3E0; border-left: 4px solid #F57C00;";
-        warningDiv.innerHTML = `
-            <strong style="color: #E65100;">警告事項:</strong>
-            <ul style="margin: 5px 0 0 20px; color: #E65100;">
-                ${draft.validation.warnings.slice(0, 10).map(warn => `<li>${warn}</li>`).join('')}
-                ${warningCount > 10 ? `<li>... 他 ${warningCount - 10} 件</li>` : ''}
-            </ul>
-        `;
-        draftDiv.appendChild(warningDiv);
-    }
-    
-    const scheduleDiv = document.createElement('div');
-    scheduleDiv.style = "padding: 15px; overflow-x: auto;";
-    scheduleDiv.innerHTML = `
-        ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
-        <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-            <i class="fas fa-check"></i> この案で確定する
-        </button>
-    `;
-    draftDiv.appendChild(scheduleDiv);
-    
-    resultsArea.appendChild(draftDiv);
-    
-    document.getElementById(confirmButtonId).addEventListener('click', function() {
-        confirmSchedule('draft1');
-    });
-    
-    enableShiftSwap('draft1');
-}
-// ★ スケジュール表示関数をこのスコープ内に移動
-function generateScheduleTableHTML(schedule, monthKey, staff) {
-    console.log("=== generateScheduleTableHTML 開始 ===");
-    console.log("monthKey:", monthKey);
-    
-    const [year, month] = monthKey.split("-").map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
-    
-    // ★希望データを取得
-    const requestsData = allRequestsForAdmin || {};
-    
-    // ヘッダー
-    let header = '<tr><th>職員名</th>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(year, month - 1, d);
-        const dayOfWeek = date.getDay();
-        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        
-        let headerStyle = '';
-        if (holidays[dateString]) {
-            headerStyle = 'background: #FFEBEE; color: #C62828;';
-        } else if (dayOfWeek === 0) {
-            headerStyle = 'background: #FFEBEE; color: #C62828;';
-        } else if (dayOfWeek === 6) {
-            headerStyle = 'background: #E3F2FD; color: #1565C0;';
-        }
-        
-        header += `<th style="${headerStyle}">${d}</th>`;
-    }
-    header += '</tr>';
-
-    // 本体
-    let body = '';
-    staff.forEach((staffMember, index) => {
-        if (staffMember.originalId === 31) return; 
-        
-        const staffSchedule = schedule[staffMember.uid];
-        if (!staffSchedule) {
-            console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
-            return; 
-        }
-
-        // 名前欄
-        let nameDisplay = staffMember.name;
-        if (staffMember.team) {
-            nameDisplay += ` <span style="color: ${staffMember.team === 'A' ? '#1976D2' : '#E65100'}; font-weight: bold;">${staffMember.team}</span>`;
-        }
-        if (staffMember.leader) {
-            nameDisplay += ' <span style="color: #F57C00; font-weight: bold;">L</span>';
-        }
-
-        body += `<tr><td>${nameDisplay}</td>`;
-        
-        // ★スタッフの希望データを取得
-        const staffRequests = requestsData[staffMember.uid];
-        const staffRequestDates = staffRequests ? staffRequests.dates : {};
-        
-        for (let d = 1; d <= daysInMonth; d++) {
-            const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)] || '休';
-            
-            const date = new Date(year, month - 1, d);
-            const dayOfWeek = date.getDay();
-            const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-            
-            let cellStyle = '';
-            if (holidays[dateString]) {
-                cellStyle = 'background: #FFF9F9;';
-            } else if (dayOfWeek === 0) {
-                cellStyle = 'background: #FFF9F9;';
-            } else if (dayOfWeek === 6) {
-                cellStyle = 'background: #F4F9FF;';
-            }
-            
-            // ★希望と違う場合、赤枠を追加
-            const requestedShift = staffRequestDates[dateString] || staffRequestDates[String(d)];
-            if (requestedShift && requestedShift !== shift) {
-                cellStyle += ' border: 3px solid #D32F2F; box-sizing: border-box;';
-            }
-            
-            body += `<td class="shift-${shift}" style="${cellStyle}">${shift}</td>`;
-        }
-        body += '</tr>';
-    });
-
-    // ★★★ 人数カウント表を生成
-    let countTable = generateCountTable(schedule, staff, daysInMonth);
-    
-    // ★★★ 個人別集計表を生成
-    let personalCountTable = generatePersonalCountTable(schedule, staff);
-
-    return `
-        <table class="schedule-table">${header}${body}</table>
-        
-        <h4 style="margin-top: 20px; color: #5D4037;">日毎の人数集計</h4>
-        ${countTable}
-        
-        <h4 style="margin-top: 20px; color: #5D4037;">個人別シフト回数集計</h4>
-        ${personalCountTable}
-    `;
-}
-
-// ★★★ 新規追加: 個人別シフト回数集計表を生成 ★★★
-function generatePersonalCountTable(schedule, staff) {
-    // テーブル生成
-    let table = '<table class="schedule-table" style="font-size: 11px;">';
-    
-    // ヘッダー
-    table += '<tr>';
-    table += '<th>職員名</th>';
-    table += '<th>チーム</th>';
-    table += '<th style="background: #E8F5E9;">日勤</th>';
-    table += '<th style="background: #E1F5FE;">準夜</th>';
-    table += '<th style="background: #E8EAF6;">夜勤</th>';
-    table += '<th style="background: #FFF3E0;">準+夜<br>合計</th>';
-    table += '<th style="background: #F5F5F5;">休み</th>';
-    table += '<th style="background: #E3F2FD;">年休等</th>';
-    table += '<th style="background: #FFEBEE;">合計</th>';
-    table += '</tr>';
-    
-    // チームAとチームBに分けてソート
-    const teamAStaff = staff.filter(s => s.originalId !== 31 && s.team === 'A')
-        .sort((a, b) => (a.originalId || 0) - (b.originalId || 0));
-    const teamBStaff = staff.filter(s => s.originalId !== 31 && s.team === 'B')
-        .sort((a, b) => (a.originalId || 0) - (b.originalId || 0));
-    
-    // チームA小計用変数
-    let teamATotal = { 日: 0, 準: 0, 夜: 0, 休: 0, その他: 0 };
-    
-    // チームAのデータ
-    teamAStaff.forEach(staffMember => {
-        const staffSchedule = schedule[staffMember.uid];
-        if (!staffSchedule) return;
-        
-        table += generatePersonalCountRow(staffMember, staffSchedule, teamATotal);
-    });
-    
-    // チームA小計
-    table += generateSubtotalRow('チームA 小計', teamATotal, '#E3F2FD');
-    
-    // チームB小計用変数
-    let teamBTotal = { 日: 0, 準: 0, 夜: 0, 休: 0, その他: 0 };
-    
-    // チームBのデータ
-    teamBStaff.forEach(staffMember => {
-        const staffSchedule = schedule[staffMember.uid];
-        if (!staffSchedule) return;
-        
-        table += generatePersonalCountRow(staffMember, staffSchedule, teamBTotal);
-    });
-    
-    // チームB小計
-    table += generateSubtotalRow('チームB 小計', teamBTotal, '#FFE0B2');
-    
-    // 全体合計
-    let grandTotal = {
-        日: teamATotal.日 + teamBTotal.日,
-        準: teamATotal.準 + teamBTotal.準,
-        夜: teamATotal.夜 + teamBTotal.夜,
-        休: teamATotal.休 + teamBTotal.休,
-        その他: teamATotal.その他 + teamBTotal.その他
-    };
-    table += generateSubtotalRow('全体合計', grandTotal, '#E0E0E0', true);
-    
-    table += '</table>';
-    
-    return table;
-}
-
-// ★★★ ヘルパー関数: 個人の行を生成 ★★★
-function generatePersonalCountRow(staffMember, staffSchedule, teamTotal) {
-    let row = '<tr>';
-    
-    // 名前
-    let nameDisplay = staffMember.name;
-    if (staffMember.leader) {
-        nameDisplay += ' <span style="color: #F57C00; font-weight: bold;">L</span>';
-    }
-    row += `<td style="text-align: left; padding-left: 10px;">${nameDisplay}</td>`;
-    
-    // チーム
-    const teamColor = staffMember.team === 'A' ? '#1976D2' : '#E65100';
-    row += `<td style="color: ${teamColor}; font-weight: bold;">${staffMember.team}</td>`;
-    
-    // 各シフトのカウント
-    const dayCount = staffSchedule.counts['日'] || 0;
-    const eveningCount = staffSchedule.counts['準'] || 0;
-    const nightCount = staffSchedule.counts['夜'] || 0;
-    const nightTotal = eveningCount + nightCount;
-    const restCount = staffSchedule.counts['休'] || 0;
-    
-    // その他（年、出、特、AM、PM、夏）
-    const otherCount = (staffSchedule.counts['年'] || 0) + 
-                       (staffSchedule.counts['出'] || 0) + 
-                       (staffSchedule.counts['特'] || 0) + 
-                       (staffSchedule.counts['AM'] || 0) + 
-                       (staffSchedule.counts['PM'] || 0) + 
-                       (staffSchedule.counts['夏'] || 0);
-    
-    const total = dayCount + eveningCount + nightCount + restCount + otherCount;
-    
-    // チーム小計に加算
-    if (teamTotal) {
-        teamTotal.日 += dayCount;
-        teamTotal.準 += eveningCount;
-        teamTotal.夜 += nightCount;
-        teamTotal.休 += restCount;
-        teamTotal.その他 += otherCount;
-    }
-    
-    // 日勤
-    row += `<td style="background: #E8F5E9;">${dayCount}</td>`;
-    
-    // 準夜
-    row += `<td style="background: #E1F5FE;">${eveningCount}</td>`;
-    
-    // 夜勤
-    row += `<td style="background: #E8EAF6;">${nightCount}</td>`;
-    
-    // 準+夜合計（8日超過チェック）
-    const nightTotalBg = nightTotal > 8 ? '#FFCDD2' : '#FFF3E0';
-    row += `<td style="background: ${nightTotalBg}; font-weight: bold;">${nightTotal}</td>`;
-    
-    // 休み
-    row += `<td style="background: #F5F5F5;">${restCount}</td>`;
-    
-    // 年休等
-    row += `<td style="background: #E3F2FD;">${otherCount}</td>`;
-    
-    // 合計
-    row += `<td style="background: #FFEBEE; font-weight: bold;">${total}</td>`;
-    
-    row += '</tr>';
-    return row;
-}
-
-// ★★★ ヘルパー関数: 小計行を生成 ★★★
-function generateSubtotalRow(label, totals, bgColor, isBold = false) {
-    const nightTotal = totals.準 + totals.夜;
-    const grandTotal = totals.日 + totals.準 + totals.夜 + totals.休 + totals.その他;
-    
-    const fontWeight = isBold ? 'font-weight: bold;' : '';
-    
-    let row = '<tr>';
-    row += `<td colspan="2" style="text-align: center; background: ${bgColor}; ${fontWeight}">${label}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.日}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.準}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.夜}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${nightTotal}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.休}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.その他}</td>`;
-    row += `<td style="background: ${bgColor}; ${fontWeight}">${grandTotal}</td>`;
-    row += '</tr>';
-    
-    return row;
-}
-            
-// ★★★ 新規追加: 人数カウント表を生成 ★★★
-// ★★★ 修正版: 人数カウント表を生成 ★★★
-function generateCountTable(schedule, staff, daysInMonth) {
-    // ★月・年の情報を取得
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth() + 1;
-    
-    // 各日のカウント
-    const dailyCounts = {};
-    
-    for (let d = 1; d <= daysInMonth; d++) {
-        dailyCounts[d] = {
-            日: { A: 0, B: 0, total: 0 },
-            準: { A: 0, B: 0, total: 0 },
-            夜: { A: 0, B: 0, total: 0 }
-        };
-    }
-    
-    // カウント集計
-    staff.forEach(staffMember => {
-        // ★除外条件を追加
-        if (staffMember.originalId === 31) return; // ID 31を除外
-        if (staffMember.originalId === 1) return;  // ID 1 (長坂)を除外
-        if (staffMember.originalId === 2) return;  // ID 2 (中里)を除外
-        
-        const staffSchedule = schedule[staffMember.uid];
-        if (!staffSchedule) return;
-        
-        const team = staffMember.team;
-        
-        for (let d = 1; d <= daysInMonth; d++) {
-            const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)];
-            
-            if (shift === '日' || shift === '準' || shift === '夜') {
-                // ★チームがA or Bの場合のみカウント
-                if (team === 'A' || team === 'B') {
-                    dailyCounts[d][shift][team]++;
-                    dailyCounts[d][shift].total++;
+                
+                if (!data || !data.drafts) {
+                    resultsArea.innerHTML += '<p class="error-message">スケジュールデータが見つかりません</p>';
+                    return;
                 }
-            }
-        }
-    });
-    
-    // テーブル生成
-    let table = '<table class="schedule-table" style="font-size: 10px;">';
-    
-    // ★ヘッダー(日付に色付け)
-    table += '<tr><th>シフト</th><th>チーム</th>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(year, month - 1, d);
-        const dayOfWeek = date.getDay();
-        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        
-        let headerStyle = 'background: #80CBC4; color: white;';
-        if (holidays[dateString]) {
-            headerStyle = 'background: #EF5350; color: white;';
-        } else if (dayOfWeek === 0) {
-            headerStyle = 'background: #EF5350; color: white;';
-        } else if (dayOfWeek === 6) {
-            headerStyle = 'background: #42A5F5; color: white;';
-        }
-        
-        table += `<th style="${headerStyle}">${d}</th>`;
-    }
-    table += '</tr>';
-    
-    // 日勤 - A
-    table += '<tr><td rowspan="3" style="background: #E8F5E9;">日勤</td><td>A</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const count = dailyCounts[d].日.A;
-        const bgColor = count === 6 ? '#C8E6C9' : (count < 6 ? '#FFCDD2' : '#FFE082');
-        table += `<td style="background: ${bgColor};">${count}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '<tr><td>B</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const count = dailyCounts[d].日.B;
-        const bgColor = count === 6 ? '#C8E6C9' : (count < 6 ? '#FFCDD2' : '#FFE082');
-        table += `<td style="background: ${bgColor};">${count}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '<tr><td>計</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const count = dailyCounts[d].日.total;
-        const bgColor = count === 12 ? '#C8E6C9' : (count < 12 ? '#FFCDD2' : '#FFE082');
-        table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
-    }
-    table += '</tr>';
-    
-    // 準夜勤 - A
-    table += '<tr><td rowspan="3" style="background: #E1F5FE;">準夜</td><td>A</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        table += `<td>${dailyCounts[d].準.A}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '<tr><td>B</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        table += `<td>${dailyCounts[d].準.B}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '<tr><td>計</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const count = dailyCounts[d].準.total;
-        const bgColor = count === 3 ? '#C8E6C9' : (count < 3 ? '#FFCDD2' : '#FFE082');
-        table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
-    }
-    table += '</tr>';
-    
-    // 夜勤 - A
-    table += '<tr><td rowspan="3" style="background: #E8EAF6;">夜勤</td><td>A</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        table += `<td>${dailyCounts[d].夜.A}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '<tr><td>B</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        table += `<td>${dailyCounts[d].夜.B}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '<tr><td>計</td>';
-    for (let d = 1; d <= daysInMonth; d++) {
-        const count = dailyCounts[d].夜.total;
-        const bgColor = count === 3 ? '#C8E6C9' : (count < 3 ? '#FFCDD2' : '#FFE082');
-        table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
-    }
-    table += '</tr>';
-    
-    table += '</table>';
-    
-    return table;
-}
-// ★ スケジュール確定関数をこのスコープ内に移動
-function confirmSchedule(draftKey) {
-    if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
-        return;
-    }
-    alert(`${draftKey} が確定されました。（機能は開発中です）`);
-}
-
-let currentEditingDraft = null; // 現在編集中のdraft
-let currentEditingSchedule = null; // 現在編集中のschedule
-
-// セルクリック時の処理
-function enableShiftSwap(draftKey) {
-    // ★エラーチェック追加
-    if (!currentScheduleData || !currentScheduleData.drafts) {
-        console.error("currentScheduleData が存在しません");
-        return;
-    }
-    
-    if (!currentScheduleData.drafts[draftKey]) {
-        console.error(`draft ${draftKey} が見つかりません`);
-        return;
-    }
-    
-    currentEditingDraft = draftKey;
-    const draft = currentScheduleData.drafts[draftKey];
-    currentEditingSchedule = JSON.parse(JSON.stringify(draft.schedule)); // ディープコピー
-    
-    console.log("勤務交換モード有効化:", draftKey);
-    
-    // すべてのシフトセルにクリックイベントを追加
-    document.querySelectorAll('.schedule-table td[class^="shift-"]').forEach(cell => {
-        cell.style.cursor = 'pointer';
-        cell.addEventListener('click', handleShiftCellClick);
-    });
-}
-
-function handleShiftCellClick(event) {
-    const cell = event.target;
-    
-    console.log("セルクリック:", cell);
-    
-    // セルからスタッフと日付を特定
-    const row = cell.parentElement;
-    const rowIndex = Array.from(row.parentElement.children).indexOf(row);
-    const colIndex = Array.from(row.children).indexOf(cell);
-    
-    if (colIndex === 0) {
-        console.log("名前列をクリック（スキップ）");
-        return; // 名前列はスキップ
-    }
-    
-    const date = colIndex; // 列番号 = 日付
-    const staffNameCell = row.children[0].textContent.trim();
-    const staffName = staffNameCell.split(' ')[0]; // 名前のみ抽出
-    
-    console.log(`クリック: ${staffName} - ${date}日`);
-    
-    // スタッフのUIDを取得
-    const staff = staffListForAdmin.find(s => s.name === staffName);
-    if (!staff) {
-        console.error("スタッフが見つかりません:", staffName);
-        showMessage("スタッフ情報が見つかりません: " + staffName, 'error');
-        return;
-    }
-    
-    const currentShift = currentEditingSchedule[staff.uid].shifts[date];
-    
-    console.log(`現在のシフト: ${currentShift}`);
-    
-    showSwapModal(staff, date, currentShift);
-}
-// 交換候補モーダルを表示
-function showSwapModal(staff, date, currentShift) {
-    const modal = document.getElementById('shift-swap-modal');
-    const content = document.getElementById('swap-modal-content');
-    
-    const monthKey = currentMonth.toISOString().slice(0, 7);
-    const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), date);
-    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-    
-    content.innerHTML = `
-        <div style="background: #F5F5F5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <h4 style="margin: 0 0 10px 0; color: #5D4037;">変更対象</h4>
-            <p style="margin: 0; font-size: 16px;">
-                <strong>${staff.name}</strong> ${staff.team}チーム - 
-                <strong>${monthKey.split('-')[1]}月${date}日 (${dayOfWeek})</strong>
-            </p>
-            <p style="margin: 5px 0 0 0; color: #666;">
-                現在: <span class="shift-${currentShift}" style="padding: 4px 8px; border-radius: 4px; font-weight: bold;">${currentShift}</span>
-            </p>
-        </div>
-        
-        <h4 style="color: #5D4037; margin-bottom: 15px;">交換・譲渡候補</h4>
-        <div id="candidate-list">
-            ${generateCandidateList(staff, date, currentShift)}
-        </div>
-    `;
-    
-    modal.style.display = 'block';
-}
-
-// 候補者リストを生成
-function generateCandidateList(targetStaff, date, targetShift) {
-    const candidates = staffListForAdmin.filter(s => 
-        s.originalId !== 31 && 
-        s.uid !== targetStaff.uid &&
-        s.originalId !== 1 && 
-        s.originalId !== 2
-    );
-    
-    let html = '';
-    
-    candidates.forEach(candidate => {
-        const candidateShift = currentEditingSchedule[candidate.uid].shifts[date];
-        const canExchange = candidateShift !== null && candidateShift !== targetShift;
-        const canTransfer = true; // 譲渡は常に可能（休みに変更される）
-        
-        // 制約チェック
-        const constraints = checkSwapConstraints(targetStaff, candidate, date, targetShift, candidateShift);
-        
-        const isAvailable = constraints.canExchange || constraints.canTransfer;
-        const availableClass = isAvailable ? '' : 'unavailable';
-        
-        html += `
-            <div class="swap-candidate ${availableClass}">
-                <div class="candidate-info">
-                    <div class="candidate-name">
-                        ${candidate.name} 
-                        <span style="color: ${candidate.team === 'A' ? '#1976D2' : '#E65100'};">${candidate.team}</span>
-                        ${candidate.leader ? '<span style="color: #F57C00;">L</span>' : ''}
+                
+                const draft = data.drafts.draft1;
+                
+                if (!draft) {
+                    resultsArea.innerHTML += '<p class="error-message">スケジュールが生成されませんでした</p>';
+                    return;
+                }
+                
+                const hasCriticalErrors = draft.validation && 
+                                           draft.validation.criticalErrors && 
+                                           draft.validation.criticalErrors.length > 0;
+                
+                const draftDiv = document.createElement('div');
+                draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+                
+                if (hasCriticalErrors) {
+                    draftDiv.innerHTML = `
+                        <div style="background: #FFEBEE; padding: 10px 15px;">
+                            <h4 style="color: #D32F2F;">${draft.type || '勤務表'} ⚠️ 必須条件未達</h4>
+                        </div>
+                        <div style="padding: 15px; background: #FFF9F9;">
+                            <p style="color: #D32F2F; font-weight: bold; margin-bottom: 10px;">
+                                ${draft.attempts || 50} 回試行しましたが、以下の必須条件が満たせませんでした:
+                            </p>
+                            <ul style="color: #D32F2F; margin-left: 20px;">
+                                ${draft.validation.criticalErrors.map(err => `<li>${err}</li>`).join('')}
+                            </ul>
+                            <p style="color: #666; margin-top: 15px; font-size: 13px;">
+                                <em>※ より多くの試行回数で再度生成するか、希望内容を調整してください。</em>
+                            </p>
+                        </div>
+                    `;
+                    resultsArea.appendChild(draftDiv);
+                    return;
+                }
+                
+                const warningCount = draft.validation?.warnings?.length || 0;
+                const validationStatus = warningCount === 0
+                    ? '<span style="color: #2E7D32;">✓ すべての必須条件をクリア</span>' 
+                    : `<span style="color: #F57C00;">⚠ 警告 ${warningCount}件</span>`;
+                
+                const confirmButtonId = 'confirm-draft1';
+                
+                draftDiv.innerHTML = `
+                    <div style="background: #F8F8F8; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <h4 style="color: #5D4037;">${draft.type || '勤務表'} 
+                            ${draft.attempts ? `<span style="font-size: 13px; color: #666;">(${draft.attempts}回試行、${draft.elapsedTime || '?'}秒、スコア: ${draft.score || '?'})</span>` : ''}
+                        </h4>
+                        <div>${validationStatus}</div>
                     </div>
-                    <div class="candidate-status">
-                        現在: <span class="shift-${candidateShift}">${candidateShift}</span>
-                        ${constraints.warning ? `<br><span style="color: #D32F2F;">⚠ ${constraints.warning}</span>` : ''}
-                    </div>
-                </div>
-                <div class="swap-actions">
-                    ${constraints.canExchange ? `
-                        <button class="swap-btn exchange" onclick="executeSwap('${targetStaff.uid}', '${candidate.uid}', ${date}, 'exchange')">
-                            交換
-                        </button>
-                    ` : ''}
-                    ${constraints.canTransfer ? `
-                        <button class="swap-btn transfer" onclick="executeSwap('${targetStaff.uid}', '${candidate.uid}', ${date}, 'transfer')">
-                            譲渡
-                        </button>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    });
-    
-    if (html === '') {
-        html = '<p style="color: #666; text-align: center; padding: 20px;">交換・譲渡可能なスタッフがいません</p>';
-    }
-    
-    return html;
-}
-
-// 交換・譲渡の制約チェック
-function checkSwapConstraints(staffA, staffB, date, shiftA, shiftB) {
-    const result = {
-        canExchange: false,
-        canTransfer: false,
-        warning: null
-    };
-    
-    // 譲渡は基本的に常に可能
-    result.canTransfer = true;
-    
-    // 交換の場合
-    if (shiftB && shiftB !== '休') {
-        result.canExchange = true;
-        
-        // 夜勤回数チェック
-        const staffANightCount = currentEditingSchedule[staffA.uid].counts['準'] + 
-                                 currentEditingSchedule[staffA.uid].counts['夜'];
-        const staffBNightCount = currentEditingSchedule[staffB.uid].counts['準'] + 
-                                 currentEditingSchedule[staffB.uid].counts['夜'];
-        
-        const shiftAIsNight = (shiftA === '準' || shiftA === '夜');
-        const shiftBIsNight = (shiftB === '準' || shiftB === '夜');
-        
-        if (shiftAIsNight && !shiftBIsNight && staffBNightCount >= 8) {
-            result.canExchange = false;
-            result.warning = "夜勤回数上限超過";
-        }
-        
-        if (!shiftAIsNight && shiftBIsNight && staffANightCount >= 8) {
-            result.canExchange = false;
-            result.warning = "夜勤回数上限超過";
-        }
-    }
-    
-    return result;
-}
-
-// 交換・譲渡を実行
-// ============================================
-// ★修正★ 交換・譲渡を実行
-// ============================================
-async function executeSwap(staffAUid, staffBUid, date, mode) {
-    console.log(`${mode}: ${staffAUid} ⇔ ${staffBUid} (${date}日)`);
-    
-    // staffListForAdminが存在するか確認
-    if (!staffListForAdmin || staffListForAdmin.length === 0) {
-        console.error("staffListForAdmin が存在しません");
-        showMessage("スタッフ情報の読み込みに失敗しました", 'error');
-        return;
-    }
-    
-    const staffA = staffListForAdmin.find(s => s.uid === staffAUid);
-    const staffB = staffListForAdmin.find(s => s.uid === staffBUid);
-    
-    if (!staffA || !staffB) {
-        console.error("スタッフが見つかりません", staffAUid, staffBUid);
-        showMessage("スタッフ情報が見つかりません", 'error');
-        return;
-    }
-    
-    const shiftA = currentEditingSchedule[staffAUid].shifts[date];
-    const shiftB = currentEditingSchedule[staffBUid].shifts[date];
-    
-    console.log(`変更前: ${staffA.name}=${shiftA}, ${staffB.name}=${shiftB}`);
-    
-    if (mode === 'exchange') {
-        // 交換
-        currentEditingSchedule[staffAUid].shifts[date] = shiftB;
-        currentEditingSchedule[staffBUid].shifts[date] = shiftA;
-        
-        // カウント更新
-        currentEditingSchedule[staffAUid].counts[shiftA]--;
-        currentEditingSchedule[staffAUid].counts[shiftB]++;
-        currentEditingSchedule[staffBUid].counts[shiftB]--;
-        currentEditingSchedule[staffBUid].counts[shiftA]++;
-        
-        showMessage(`${staffA.name} と ${staffB.name} の ${date}日のシフトを交換しました`, 'success');
-        
-    } else if (mode === 'transfer') {
-        // 譲渡
-        currentEditingSchedule[staffBUid].shifts[date] = shiftA;
-        currentEditingSchedule[staffAUid].shifts[date] = '休';
-        
-        // カウント更新
-        if (shiftB && currentEditingSchedule[staffBUid].counts[shiftB] !== undefined) {
-            currentEditingSchedule[staffBUid].counts[shiftB]--;
-        }
-        currentEditingSchedule[staffBUid].counts[shiftA]++;
-        currentEditingSchedule[staffAUid].counts[shiftA]--;
-        currentEditingSchedule[staffAUid].counts['休']++;
-        
-        showMessage(`${staffA.name} の ${date}日のシフトを ${staffB.name} に譲渡しました`, 'success');
-    }
-    
-    console.log(`変更後: ${staffA.name}=${currentEditingSchedule[staffAUid].shifts[date]}, ${staffB.name}=${currentEditingSchedule[staffBUid].shifts[date]}`);
-    
-    // スケジュールを再表示
-    closeSwapModal();
-    refreshScheduleDisplay();
-    
-    // Firestoreに保存
-    await saveEditedSchedule();
-}
-// スケジュール表示を更新
-function refreshScheduleDisplay() {
-    const monthKey = currentMonth.toISOString().slice(0, 7);
-    
-    if (!currentScheduleData || !currentScheduleData.drafts) {
-        console.error("currentScheduleData が存在しません");
-        return;
-    }
-    
-    const draft = currentScheduleData.drafts[currentEditingDraft];
-    if (!draft) {
-        console.error(`draft ${currentEditingDraft} が見つかりません`);
-        return;
-    }
-    
-    // 編集したスケジュールを反映
-    draft.schedule = currentEditingSchedule;
-    
-    // 該当のdraftのみ再描画
-    const resultsArea = document.getElementById('schedule-results');
-    
-    // 既存の表示を完全に削除
-    resultsArea.innerHTML = '';
-    
-    // 再表示
-    displayScheduleResults(currentScheduleData, monthKey);
-}
-
-// 編集したスケジュールをFirestoreに保存
-// ============================================
-// ★修正★ 編集したスケジュールをFirestoreに保存
-// ============================================
-async function saveEditedSchedule() {
-    try {
-        const monthKey = currentMonth.toISOString().slice(0, 7);
-        
-        console.log("スケジュール保存開始:", monthKey, currentEditingDraft);
-        
-        // Firestoreに保存
-        await db.collection('Schedules').doc(monthKey).update({
-            [`drafts.${currentEditingDraft}.schedule`]: currentEditingSchedule,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        console.log("✅ 編集したスケジュールを保存しました");
-        
-    } catch (error) {
-        console.error("❌ スケジュール保存エラー:", error);
-        showMessage("スケジュールの保存に失敗しました: " + error.message, 'error');
-    }
-}
-
-// モーダルを閉じる
-function closeSwapModal() {
-    document.getElementById('shift-swap-modal').style.display = 'none';
-}
-
-// モーダル外をクリックしても閉じる
-document.addEventListener('DOMContentLoaded', function() {
-    const modal = document.getElementById('shift-swap-modal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                closeSwapModal();
+                `;
+                
+                if (warningCount > 0) {
+                    const warningDiv = document.createElement('div');
+                    warningDiv.style = "padding: 10px 15px; background: #FFF3E0; border-left: 4px solid #F57C00;";
+                    warningDiv.innerHTML = `
+                        <strong style="color: #E65100;">警告事項:</strong>
+                        <ul style="margin: 5px 0 0 20px; color: #E65100;">
+                            ${draft.validation.warnings.slice(0, 10).map(warn => `<li>${warn}</li>`).join('')}
+                            ${warningCount > 10 ? `<li>... 他 ${warningCount - 10} 件</li>` : ''}
+                        </ul>
+                    `;
+                    draftDiv.appendChild(warningDiv);
+                }
+                
+                const scheduleDiv = document.createElement('div');
+                scheduleDiv.style = "padding: 15px; overflow-x: auto;";
+                scheduleDiv.innerHTML = `
+                    ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
+                    <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                        <i class="fas fa-check"></i> この案で確定する
+                    </button>
+                `;
+                draftDiv.appendChild(scheduleDiv);
+                
+                resultsArea.appendChild(draftDiv);
+                
+                document.getElementById(confirmButtonId).addEventListener('click', function() {
+                    confirmSchedule('draft1');
+                });
+                
+                enableShiftSwap('draft1');
             }
-        });
-    }
-});
 
-// メッセージ表示
-// ============================================
-// ★修正★ メッセージ表示（アニメーション追加）
-// ============================================
-function showMessage(message, type) {
-    const color = type === 'success' ? '#4CAF50' : '#D32F2F';
-    const icon = type === 'success' ? '✓' : '✗';
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: ${color};
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 10000;
-        font-size: 14px;
-        max-width: 400px;
-        animation: slideIn 0.3s ease-out;
-    `;
-    messageDiv.innerHTML = `<strong>${icon}</strong> ${message}`;
-    document.body.appendChild(messageDiv);
-    
-    setTimeout(() => {
-        messageDiv.style.animation = 'slideOut 0.3s ease-out';
-        setTimeout(() => {
-            messageDiv.remove();
-        }, 300);
-    }, 3000);
-}
+            function generateScheduleTableHTML(schedule, monthKey, staff) {
+                console.log("=== generateScheduleTableHTML 開始 ===");
+                console.log("monthKey:", monthKey);
+                
+                const [year, month] = monthKey.split("-").map(Number);
+                const daysInMonth = new Date(year, month, 0).getDate();
+                
+                const requestsData = allRequestsForAdmin || {};
+                
+                let header = '<tr><th>職員名</th>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const date = new Date(year, month - 1, d);
+                    const dayOfWeek = date.getDay();
+                    const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    
+                    let headerStyle = '';
+                    if (holidays[dateString]) {
+                        headerStyle = 'background: #FFEBEE; color: #C62828;';
+                    } else if (dayOfWeek === 0) {
+                        headerStyle = 'background: #FFEBEE; color: #C62828;';
+                    } else if (dayOfWeek === 6) {
+                        headerStyle = 'background: #E3F2FD; color: #1565C0;';
+                    }
+                    
+                    header += `<th style="${headerStyle}">${d}</th>`;
+                }
+                header += '</tr>';
 
-// CSSアニメーション（<style>タグ内に追加）
+                let body = '';
+                staff.forEach((staffMember, index) => {
+                    if (staffMember.originalId === 31) return; 
+                    
+                    const staffSchedule = schedule[staffMember.uid];
+                    if (!staffSchedule) {
+                        console.warn(`スケジュールデータが見つかりません: ${staffMember.name}`);
+                        return; 
+                    }
 
-/* ▲▲▲ ここまで ▲▲▲ */
+                    let nameDisplay = staffMember.name;
+                    if (staffMember.team) {
+                        nameDisplay += ` <span style="color: ${staffMember.team === 'A' ? '#1976D2' : '#E65100'}; font-weight: bold;">${staffMember.team}</span>`;
+                    }
+                    if (staffMember.leader) {
+                        nameDisplay += ' <span style="color: #F57C00; font-weight: bold;">L</span>';
+                    }
+
+                    body += `<tr><td>${nameDisplay}</td>`;
+                    
+                    const staffRequests = requestsData[staffMember.uid];
+                    const staffRequestDates = staffRequests ? staffRequests.dates : {};
+                    
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)] || '休';
+                        
+                        const date = new Date(year, month - 1, d);
+                        const dayOfWeek = date.getDay();
+                        const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        
+                        let cellStyle = '';
+                        if (holidays[dateString]) {
+                            cellStyle = 'background: #FFF9F9;';
+                        } else if (dayOfWeek === 0) {
+                            cellStyle = 'background: #FFF9F9;';
+                        } else if (dayOfWeek === 6) {
+                            cellStyle = 'background: #F4F9FF;';
+                        }
+                        
+                        const requestedShift = staffRequestDates[dateString] || staffRequestDates[String(d)];
+                        if (requestedShift && requestedShift !== shift) {
+                            cellStyle += ' border: 3px solid #D32F2F; box-sizing: border-box;';
+                        }
+                        
+                        body += `<td class="shift-${shift}" style="${cellStyle}">${shift}</td>`;
+                    }
+                    body += '</tr>';
+                });
+
+                let countTable = generateCountTable(schedule, staff, daysInMonth);
+                let personalCountTable = generatePersonalCountTable(schedule, staff);
+
+                return `
+                    <table class="schedule-table">${header}${body}</table>
+                    
+                    <h4 style="margin-top: 20px; color: #5D4037;">日毎の人数集計</h4>
+                    ${countTable}
+                    
+                    <h4 style="margin-top: 20px; color: #5D4037;">個人別シフト回数集計</h4>
+                    ${personalCountTable}
+                `;
+            }
+
+            function generatePersonalCountTable(schedule, staff) {
+                let table = '<table class="schedule-table" style="font-size: 11px;">';
+                
+                table += '<tr>';
+                table += '<th>職員名</th>';
+                table += '<th>チーム</th>';
+                table += '<th style="background: #E8F5E9;">日勤</th>';
+                table += '<th style="background: #E1F5FE;">準夜</th>';
+                table += '<th style="background: #E8EAF6;">夜勤</th>';
+                table += '<th style="background: #FFF3E0;">準+夜<br>合計</th>';
+                table += '<th style="background: #F5F5F5;">休み</th>';
+                table += '<th style="background: #E3F2FD;">年休等</th>';
+                table += '<th style="background: #FFEBEE;">合計</th>';
+                table += '</tr>';
+            const teamAStaff = staff.filter(s => s.originalId !== 31 && s.team === 'A')
+                    .sort((a, b) => (a.originalId || 0) - (b.originalId || 0));
+                const teamBStaff = staff.filter(s => s.originalId !== 31 && s.team === 'B')
+                    .sort((a, b) => (a.originalId || 0) - (b.originalId || 0));
+                
+                let teamATotal = { 日: 0, 準: 0, 夜: 0, 休: 0, その他: 0 };
+                
+                teamAStaff.forEach(staffMember => {
+                    const staffSchedule = schedule[staffMember.uid];
+                    if (!staffSchedule) return;
+                    
+                    table += generatePersonalCountRow(staffMember, staffSchedule, teamATotal);
+                });
+                
+                table += generateSubtotalRow('チームA 小計', teamATotal, '#E3F2FD');
+                
+                let teamBTotal = { 日: 0, 準: 0, 夜: 0, 休: 0, その他: 0 };
+                
+                teamBStaff.forEach(staffMember => {
+                    const staffSchedule = schedule[staffMember.uid];
+                    if (!staffSchedule) return;
+                    
+                    table += generatePersonalCountRow(staffMember, staffSchedule, teamBTotal);
+                });
+                
+                table += generateSubtotalRow('チームB 小計', teamBTotal, '#FFE0B2');
+                
+                let grandTotal = {
+                    日: teamATotal.日 + teamBTotal.日,
+                    準: teamATotal.準 + teamBTotal.準,
+                    夜: teamATotal.夜 + teamBTotal.夜,
+                    休: teamATotal.休 + teamBTotal.休,
+                    その他: teamATotal.その他 + teamBTotal.その他
+                };
+                table += generateSubtotalRow('全体合計', grandTotal, '#E0E0E0', true);
+                
+                table += '</table>';
+                
+                return table;
+            }
+
+            function generatePersonalCountRow(staffMember, staffSchedule, teamTotal) {
+                let row = '<tr>';
+                
+                let nameDisplay = staffMember.name;
+                if (staffMember.leader) {
+                    nameDisplay += ' <span style="color: #F57C00; font-weight: bold;">L</span>';
+                }
+                row += `<td style="text-align: left; padding-left: 10px;">${nameDisplay}</td>`;
+                
+                const teamColor = staffMember.team === 'A' ? '#1976D2' : '#E65100';
+                row += `<td style="color: ${teamColor}; font-weight: bold;">${staffMember.team}</td>`;
+                
+                const dayCount = staffSchedule.counts['日'] || 0;
+                const eveningCount = staffSchedule.counts['準'] || 0;
+                const nightCount = staffSchedule.counts['夜'] || 0;
+                const nightTotal = eveningCount + nightCount;
+                const restCount = staffSchedule.counts['休'] || 0;
+                
+                const otherCount = (staffSchedule.counts['年'] || 0) + 
+                                   (staffSchedule.counts['出'] || 0) + 
+                                   (staffSchedule.counts['特'] || 0) + 
+                                   (staffSchedule.counts['AM'] || 0) + 
+                                   (staffSchedule.counts['PM'] || 0) + 
+                                   (staffSchedule.counts['夏'] || 0);
+                
+                const total = dayCount + eveningCount + nightCount + restCount + otherCount;
+                
+                if (teamTotal) {
+                    teamTotal.日 += dayCount;
+                    teamTotal.準 += eveningCount;
+                    teamTotal.夜 += nightCount;
+                    teamTotal.休 += restCount;
+                    teamTotal.その他 += otherCount;
+                }
+                
+                row += `<td style="background: #E8F5E9;">${dayCount}</td>`;
+                row += `<td style="background: #E1F5FE;">${eveningCount}</td>`;
+                row += `<td style="background: #E8EAF6;">${nightCount}</td>`;
+                
+                const nightTotalBg = nightTotal > 8 ? '#FFCDD2' : '#FFF3E0';
+                row += `<td style="background: ${nightTotalBg}; font-weight: bold;">${nightTotal}</td>`;
+                
+                row += `<td style="background: #F5F5F5;">${restCount}</td>`;
+                row += `<td style="background: #E3F2FD;">${otherCount}</td>`;
+                row += `<td style="background: #FFEBEE; font-weight: bold;">${total}</td>`;
+                
+                row += '</tr>';
+                return row;
+            }
+
+            function generateSubtotalRow(label, totals, bgColor, isBold = false) {
+                const nightTotal = totals.準 + totals.夜;
+                const grandTotal = totals.日 + totals.準 + totals.夜 + totals.休 + totals.その他;
+                
+                const fontWeight = isBold ? 'font-weight: bold;' : '';
+                
+                let row = '<tr>';
+                row += `<td colspan="2" style="text-align: center; background: ${bgColor}; ${fontWeight}">${label}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.日}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.準}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.夜}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${nightTotal}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.休}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${totals.その他}</td>`;
+                row += `<td style="background: ${bgColor}; ${fontWeight}">${grandTotal}</td>`;
+                row += '</tr>';
+                
+                return row;
+            }
+            
+            function generateCountTable(schedule, staff, daysInMonth) {
+                const year = currentMonth.getFullYear();
+                const month = currentMonth.getMonth() + 1;
+                
+                const dailyCounts = {};
+                
+                for (let d = 1; d <= daysInMonth; d++) {
+                    dailyCounts[d] = {
+                        日: { A: 0, B: 0, total: 0 },
+                        準: { A: 0, B: 0, total: 0 },
+                        夜: { A: 0, B: 0, total: 0 }
+                    };
+                }
+                
+                staff.forEach(staffMember => {
+                    if (staffMember.originalId === 31) return;
+                    if (staffMember.originalId === 1) return;
+                    if (staffMember.originalId === 2) return;
+                    
+                    const staffSchedule = schedule[staffMember.uid];
+                    if (!staffSchedule) return;
+                    
+                    const team = staffMember.team;
+                    
+                    for (let d = 1; d <= daysInMonth; d++) {
+                        const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)];
+                        
+                        if (shift === '日' || shift === '準' || shift === '夜') {
+                            if (team === 'A' || team === 'B') {
+                                dailyCounts[d][shift][team]++;
+                                dailyCounts[d][shift].total++;
+                            }
+                        }
+                    }
+                });
+                
+                let table = '<table class="schedule-table" style="font-size: 10px;">';
+                
+                table += '<tr><th>シフト</th><th>チーム</th>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const date = new Date(year, month - 1, d);
+                    const dayOfWeek = date.getDay();
+                    const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    
+                    let headerStyle = 'background: #80CBC4; color: white;';
+                    if (holidays[dateString]) {
+                        headerStyle = 'background: #EF5350; color: white;';
+                    } else if (dayOfWeek === 0) {
+                        headerStyle = 'background: #EF5350; color: white;';
+                    } else if (dayOfWeek === 6) {
+                        headerStyle = 'background: #42A5F5; color: white;';
+                    }
+                    
+                    table += `<th style="${headerStyle}">${d}</th>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td rowspan="3" style="background: #E8F5E9;">日勤</td><td>A</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const count = dailyCounts[d].日.A;
+                    const bgColor = count === 6 ? '#C8E6C9' : (count < 6 ? '#FFCDD2' : '#FFE082');
+                    table += `<td style="background: ${bgColor};">${count}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td>B</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const count = dailyCounts[d].日.B;
+                    const bgColor = count === 6 ? '#C8E6C9' : (count < 6 ? '#FFCDD2' : '#FFE082');
+                    table += `<td style="background: ${bgColor};">${count}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td>計</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const count = dailyCounts[d].日.total;
+                    const bgColor = count === 12 ? '#C8E6C9' : (count < 12 ? '#FFCDD2' : '#FFE082');
+                    table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td rowspan="3" style="background: #E1F5FE;">準夜</td><td>A</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    table += `<td>${dailyCounts[d].準.A}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td>B</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    table += `<td>${dailyCounts[d].準.B}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td>計</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const count = dailyCounts[d].準.total;
+                    const bgColor = count === 3 ? '#C8E6C9' : (count < 3 ? '#FFCDD2' : '#FFE082');
+                    table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td rowspan="3" style="background: #E8EAF6;">夜勤</td><td>A</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    table += `<td>${dailyCounts[d].夜.A}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td>B</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    table += `<td>${dailyCounts[d].夜.B}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '<tr><td>計</td>';
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const count = dailyCounts[d].夜.total;
+                    const bgColor = count === 3 ? '#C8E6C9' : (count < 3 ? '#FFCDD2' : '#FFE082');
+                    table += `<td style="background: ${bgColor}; font-weight: bold;">${count}</td>`;
+                }
+                table += '</tr>';
+                
+                table += '</table>';
+                
+                return table;
+            }
+
+            function confirmSchedule(draftKey) {
+                if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
+                    return;
+                }
+                alert(`${draftKey} が確定されました。（機能は開発中です）`);
+            }
+
         } catch (error) {
             console.error('初期化エラー:', error);
             document.getElementById('loadingSection').innerHTML = 
@@ -2280,18 +2115,5 @@ function showMessage(message, type) {
         }
     });
     </script>
-<!-- ★勤務交換モーダル -->
-<div id="shift-swap-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
-    <div style="background: white; max-width: 800px; margin: 50px auto; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-        <div style="background: #1976D2; color: white; padding: 20px; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin: 0;">勤務交換・譲渡</h3>
-            <button onclick="closeSwapModal()" style="background: transparent; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
-        </div>
-        
-        <div id="swap-modal-content" style="padding: 20px;">
-            <!-- 動的に生成 -->
-        </div>
-    </div>
-</div>    
 </body>
 </html>
