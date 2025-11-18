@@ -1435,7 +1435,7 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
     });
 
     // ★人数カウント表を追加
-    let countTable = generateCountTable(schedule, staff, daysInMonth, year, month);
+    let countTable = generateCountTable(schedule, staff, daysInMonth);
 
     return `
         <table class="schedule-table">${header}${body}</table>
@@ -1446,7 +1446,9 @@ function generateScheduleTableHTML(schedule, monthKey, staff) {
 // ★★★ 新規追加: 人数カウント表を生成 ★★★
 // ★★★ 修正版: 人数カウント表を生成 ★★★
 function generateCountTable(schedule, staff, daysInMonth) {
-    const [year, month] = currentMonth.getFullYear(), currentMonth.getMonth() + 1;
+    // ★月・年の情報を取得
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
     
     // 各日のカウント
     const dailyCounts = {};
@@ -1472,7 +1474,7 @@ function generateCountTable(schedule, staff, daysInMonth) {
             const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)];
             
             if (shift === '日' || shift === '準' || shift === '夜') {
-                dailyCounts[d][team]++;
+                dailyCounts[d][shift][team]++;
                 dailyCounts[d][shift].total++;
             }
         }
@@ -1488,7 +1490,7 @@ function generateCountTable(schedule, staff, daysInMonth) {
         const dayOfWeek = date.getDay();
         const dateString = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         
-        let headerStyle = 'background: #80CBC4; color: white;'; // デフォルト
+        let headerStyle = 'background: #80CBC4; color: white;';
         if (holidays[dateString]) {
             headerStyle = 'background: #EF5350; color: white;';
         } else if (dayOfWeek === 0) {
@@ -1571,7 +1573,6 @@ function generateCountTable(schedule, staff, daysInMonth) {
     table += '</table>';
     
     return table;
-}
 }
 // ★ スケジュール確定関数をこのスコープ内に移動
 function confirmSchedule(draftKey) {
