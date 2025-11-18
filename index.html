@@ -1312,12 +1312,12 @@ function displayScheduleResults(data, monthKey) {
             </h4>
         </div>
     `;
-
+    
     if (!data || !data.drafts) {
         resultsArea.innerHTML += '<p class="error-message">スケジュールデータが見つかりません</p>';
         return;
     }
-
+    
     ['draft1', 'draft2', 'draft3'].forEach((draftKey, index) => {
         const draft = data.drafts[draftKey]; 
         if (!draft) {
@@ -1325,12 +1325,41 @@ function displayScheduleResults(data, monthKey) {
             return;
         }
         
-        const validationStatus = draft.validation && draft.validation.isValid 
-            ? '<span style="color: #2E7D32;">✓ 制約クリア</span>' 
-            : `<span style="color: #D32F2F;">✗ エラー ${draft.validation?.errors?.length || 0}件</span>`;
+        // ★致命的エラーチェック
+        const hasCriticalErrors = draft.validation && 
+                                   draft.validation.criticalErrors && 
+                                   draft.validation.criticalErrors.length > 0;
         
         const draftDiv = document.createElement('div');
         draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+        
+        // ★致命的エラーがある場合
+        if (hasCriticalErrors) {
+            draftDiv.innerHTML = `
+                <div style="background: #FFEBEE; padding: 10px 15px;">
+                    <h4 style="color: #D32F2F;">案 ${index + 1}: ${draft.type || 'タイプ不明'} ⚠️ 必須条件未達</h4>
+                </div>
+                <div style="padding: 15px; background: #FFF9F9;">
+                    <p style="color: #D32F2F; font-weight: bold; margin-bottom: 10px;">
+                        以下の必須条件が満たせていないため、この案はスケジュールとして成立していません:
+                    </p>
+                    <ul style="color: #D32F2F; margin-left: 20px;">
+                        ${draft.validation.criticalErrors.map(err => `<li>${err}</li>`).join('')}
+                    </ul>
+                    <p style="color: #666; margin-top: 15px; font-size: 13px;">
+                        <em>※ この案は表示されません。他の案をご確認ください。</em>
+                    </p>
+                </div>
+            `;
+            resultsArea.appendChild(draftDiv);
+            return; // この案は表として表示しない
+        }
+        
+        // ★正常な案の表示
+        const warningCount = draft.validation?.warnings?.length || 0;
+        const validationStatus = warningCount === 0
+            ? '<span style="color: #2E7D32;">✓ すべての必須条件をクリア</span>' 
+            : `<span style="color: #F57C00;">⚠ 警告 ${warningCount}件</span>`;
         
         const confirmButtonId = `confirm-${draftKey}`;
         
@@ -1339,15 +1368,35 @@ function displayScheduleResults(data, monthKey) {
                 <h4 style="color: #5D4037;">案 ${index + 1}: ${draft.type || 'タイプ不明'}</h4>
                 <div>${validationStatus}</div>
             </div>
-            <div style="padding: 15px; overflow-x: auto;">
-                ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
-                <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-                    <i class="fas fa-check"></i> この案で確定する
-                </button>
-            </div>
         `;
+        
+        // ★警告がある場合は表示
+        if (warningCount > 0) {
+            const warningDiv = document.createElement('div');
+            warningDiv.style = "padding: 10px 15px; background: #FFF3E0; border-left: 4px solid #F57C00;";
+            warningDiv.innerHTML = `
+                <strong style="color: #E65100;">警告事項:</strong>
+                <ul style="margin: 5px 0 0 20px; color: #E65100;">
+                    ${draft.validation.warnings.map(warn => `<li>${warn}</li>`).join('')}
+                </ul>
+            `;
+            draftDiv.appendChild(warningDiv);
+        }
+        
+        // ★スケジュール表
+        const scheduleDiv = document.createElement('div');
+        scheduleDiv.style = "padding: 15px; overflow-x: auto;";
+        scheduleDiv.innerHTML = `
+            ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
+            <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                <i class="fas fa-check"></i> この案で確定する
+            </button>
+        `;
+        draftDiv.appendChild(scheduleDiv);
+        
         resultsArea.appendChild(draftDiv);
         
+        // ボタンのイベントリスナー
         document.getElementById(confirmButtonId).addEventListener('click', function() {
             confirmSchedule(draftKey);
         });
