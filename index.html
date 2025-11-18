@@ -1630,7 +1630,10 @@ function generateCountTable(schedule, staff, daysInMonth) {
     
     // カウント集計
     staff.forEach(staffMember => {
-        if (staffMember.originalId === 31) return;
+        // ★除外条件を追加
+        if (staffMember.originalId === 31) return; // ID 31を除外
+        if (staffMember.originalId === 1) return;  // ID 1 (長坂)を除外
+        if (staffMember.originalId === 2) return;  // ID 2 (中里)を除外
         
         const staffSchedule = schedule[staffMember.uid];
         if (!staffSchedule) return;
@@ -1641,8 +1644,11 @@ function generateCountTable(schedule, staff, daysInMonth) {
             const shift = staffSchedule.shifts[d] || staffSchedule.shifts[String(d)];
             
             if (shift === '日' || shift === '準' || shift === '夜') {
-                dailyCounts[d][shift][team]++;
-                dailyCounts[d][shift].total++;
+                // ★チームがA or Bの場合のみカウント
+                if (team === 'A' || team === 'B') {
+                    dailyCounts[d][shift][team]++;
+                    dailyCounts[d][shift].total++;
+                }
             }
         }
     });
