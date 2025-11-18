@@ -209,6 +209,27 @@
         .swap-btn.transfer:hover {
             background: #F57C00;
         }
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1918,15 +1939,21 @@ function enableShiftSwap(draftKey) {
 function handleShiftCellClick(event) {
     const cell = event.target;
     
+    console.log("セルクリック:", cell);
+    
     // セルからスタッフと日付を特定
     const row = cell.parentElement;
     const rowIndex = Array.from(row.parentElement.children).indexOf(row);
     const colIndex = Array.from(row.children).indexOf(cell);
     
-    if (colIndex === 0) return; // 名前列はスキップ
+    if (colIndex === 0) {
+        console.log("名前列をクリック（スキップ）");
+        return; // 名前列はスキップ
+    }
     
     const date = colIndex; // 列番号 = 日付
-    const staffName = row.children[0].textContent.trim().split(' ')[0]; // 名前のみ抽出
+    const staffNameCell = row.children[0].textContent.trim();
+    const staffName = staffNameCell.split(' ')[0]; // 名前のみ抽出
     
     console.log(`クリック: ${staffName} - ${date}日`);
     
@@ -1934,14 +1961,16 @@ function handleShiftCellClick(event) {
     const staff = staffListForAdmin.find(s => s.name === staffName);
     if (!staff) {
         console.error("スタッフが見つかりません:", staffName);
+        showMessage("スタッフ情報が見つかりません: " + staffName, 'error');
         return;
     }
     
     const currentShift = currentEditingSchedule[staff.uid].shifts[date];
     
+    console.log(`現在のシフト: ${currentShift}`);
+    
     showSwapModal(staff, date, currentShift);
 }
-
 // 交換候補モーダルを表示
 function showSwapModal(staff, date, currentShift) {
     const modal = document.getElementById('shift-swap-modal');
@@ -2069,14 +2098,32 @@ function checkSwapConstraints(staffA, staffB, date, shiftA, shiftB) {
 }
 
 // 交換・譲渡を実行
+// ============================================
+// ★修正★ 交換・譲渡を実行
+// ============================================
 async function executeSwap(staffAUid, staffBUid, date, mode) {
     console.log(`${mode}: ${staffAUid} ⇔ ${staffBUid} (${date}日)`);
+    
+    // staffListForAdminが存在するか確認
+    if (!staffListForAdmin || staffListForAdmin.length === 0) {
+        console.error("staffListForAdmin が存在しません");
+        showMessage("スタッフ情報の読み込みに失敗しました", 'error');
+        return;
+    }
     
     const staffA = staffListForAdmin.find(s => s.uid === staffAUid);
     const staffB = staffListForAdmin.find(s => s.uid === staffBUid);
     
+    if (!staffA || !staffB) {
+        console.error("スタッフが見つかりません", staffAUid, staffBUid);
+        showMessage("スタッフ情報が見つかりません", 'error');
+        return;
+    }
+    
     const shiftA = currentEditingSchedule[staffAUid].shifts[date];
     const shiftB = currentEditingSchedule[staffBUid].shifts[date];
+    
+    console.log(`変更前: ${staffA.name}=${shiftA}, ${staffB.name}=${shiftB}`);
     
     if (mode === 'exchange') {
         // 交換
@@ -2097,13 +2144,17 @@ async function executeSwap(staffAUid, staffBUid, date, mode) {
         currentEditingSchedule[staffAUid].shifts[date] = '休';
         
         // カウント更新
-        currentEditingSchedule[staffBUid].counts[shiftB]--;
+        if (shiftB && currentEditingSchedule[staffBUid].counts[shiftB] !== undefined) {
+            currentEditingSchedule[staffBUid].counts[shiftB]--;
+        }
         currentEditingSchedule[staffBUid].counts[shiftA]++;
         currentEditingSchedule[staffAUid].counts[shiftA]--;
         currentEditingSchedule[staffAUid].counts['休']++;
         
         showMessage(`${staffA.name} の ${date}日のシフトを ${staffB.name} に譲渡しました`, 'success');
     }
+    
+    console.log(`変更後: ${staffA.name}=${currentEditingSchedule[staffAUid].shifts[date]}, ${staffB.name}=${currentEditingSchedule[staffBUid].shifts[date]}`);
     
     // スケジュールを再表示
     closeSwapModal();
@@ -2112,36 +2163,43 @@ async function executeSwap(staffAUid, staffBUid, date, mode) {
     // Firestoreに保存
     await saveEditedSchedule();
 }
-
 // スケジュール表示を更新
 function refreshScheduleDisplay() {
     const monthKey = currentMonth.toISOString().slice(0, 7);
+    
+    if (!currentScheduleData || !currentScheduleData.drafts) {
+        console.error("currentScheduleData が存在しません");
+        return;
+    }
+    
     const draft = currentScheduleData.drafts[currentEditingDraft];
+    if (!draft) {
+        console.error(`draft ${currentEditingDraft} が見つかりません`);
+        return;
+    }
+    
+    // 編集したスケジュールを反映
     draft.schedule = currentEditingSchedule;
     
     // 該当のdraftのみ再描画
-    const draftDiv = document.querySelector(`#confirm-${currentEditingDraft}`).closest('div').parentElement;
-    const scheduleHTML = generateScheduleTableHTML(currentEditingSchedule, monthKey, staffListForAdmin);
+    const resultsArea = document.getElementById('schedule-results');
     
-    draftDiv.querySelector('[style*="overflow-x: auto"]').innerHTML = scheduleHTML + `
-        <button id="confirm-${currentEditingDraft}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-            <i class="fas fa-check"></i> この案で確定する
-        </button>
-    `;
+    // 既存の表示を完全に削除
+    resultsArea.innerHTML = '';
     
-    // イベントリスナー再設定
-    document.getElementById(`confirm-${currentEditingDraft}`).addEventListener('click', function() {
-        confirmSchedule(currentEditingDraft);
-    });
-    
-    // クリックイベント再設定
-    enableShiftSwap(currentEditingDraft);
+    // 再表示
+    displayScheduleResults(currentScheduleData, monthKey);
 }
 
 // 編集したスケジュールをFirestoreに保存
+// ============================================
+// ★修正★ 編集したスケジュールをFirestoreに保存
+// ============================================
 async function saveEditedSchedule() {
     try {
         const monthKey = currentMonth.toISOString().slice(0, 7);
+        
+        console.log("スケジュール保存開始:", monthKey, currentEditingDraft);
         
         // Firestoreに保存
         await db.collection('Schedules').doc(monthKey).update({
@@ -2149,11 +2207,11 @@ async function saveEditedSchedule() {
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        console.log("編集したスケジュールを保存しました");
+        console.log("✅ 編集したスケジュールを保存しました");
         
     } catch (error) {
-        console.error("スケジュール保存エラー:", error);
-        showMessage("スケジュールの保存に失敗しました", 'error');
+        console.error("❌ スケジュール保存エラー:", error);
+        showMessage("スケジュールの保存に失敗しました: " + error.message, 'error');
     }
 }
 
@@ -2162,11 +2220,28 @@ function closeSwapModal() {
     document.getElementById('shift-swap-modal').style.display = 'none';
 }
 
+// モーダル外をクリックしても閉じる
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('shift-swap-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                closeSwapModal();
+            }
+        });
+    }
+});
+
 // メッセージ表示
+// ============================================
+// ★修正★ メッセージ表示（アニメーション追加）
+// ============================================
 function showMessage(message, type) {
     const color = type === 'success' ? '#4CAF50' : '#D32F2F';
+    const icon = type === 'success' ? '✓' : '✗';
+    
     const messageDiv = document.createElement('div');
-    messageDiv.style = `
+    messageDiv.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
@@ -2175,16 +2250,23 @@ function showMessage(message, type) {
         padding: 15px 20px;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 2000;
-        animation: slideIn 0.3s;
+        z-index: 10000;
+        font-size: 14px;
+        max-width: 400px;
+        animation: slideIn 0.3s ease-out;
     `;
-    messageDiv.textContent = message;
+    messageDiv.innerHTML = `<strong>${icon}</strong> ${message}`;
     document.body.appendChild(messageDiv);
     
     setTimeout(() => {
-        messageDiv.remove();
+        messageDiv.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => {
+            messageDiv.remove();
+        }, 300);
     }, 3000);
 }
+
+// CSSアニメーション（<style>タグ内に追加）
 
 /* ▲▲▲ ここまで ▲▲▲ */
         } catch (error) {
