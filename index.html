@@ -428,6 +428,9 @@
     let staffListForAdmin = []; 
     let allRequestsForAdmin = {}; 
 
+    let currentScheduleData = null; // 現在表示中のスケジュールデータ
+    let currentEditingDraft = null; // 現在編集中のdraft
+    let currentEditingSchedule = null; // 現在編集中のschedule
     // ============================================
     // ログイン関連
     // ============================================
@@ -1378,6 +1381,8 @@ function sleep(ms) {
 // ★ スケジュール表示関数をこのスコープ内に移動
 // ★ スケジュール表示関数を修正
 function displayScheduleResults(data, monthKey) {
+    currentScheduleData = data;
+    
     const resultsArea = document.getElementById('schedule-results');
     
     resultsArea.innerHTML = `
@@ -1885,6 +1890,17 @@ let currentEditingSchedule = null; // 現在編集中のschedule
 
 // セルクリック時の処理
 function enableShiftSwap(draftKey) {
+    // ★エラーチェック追加
+    if (!currentScheduleData || !currentScheduleData.drafts) {
+        console.error("currentScheduleData が存在しません");
+        return;
+    }
+    
+    if (!currentScheduleData.drafts[draftKey]) {
+        console.error(`draft ${draftKey} が見つかりません`);
+        return;
+    }
+    
     currentEditingDraft = draftKey;
     const draft = currentScheduleData.drafts[draftKey];
     currentEditingSchedule = JSON.parse(JSON.stringify(draft.schedule)); // ディープコピー
