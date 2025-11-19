@@ -61,12 +61,14 @@ self.onmessage = function(e) {
             // 今回は実装を単純にするため省略
         }
 
+        // 1000回ごとに進捗送信
         if (i % 1000 === 0) {
             self.postMessage({ 
                 type: 'progress', 
                 iteration: i, 
                 max: MAX_ITERATIONS, 
-                score: bestScore 
+                score: bestScore,
+                schedule: bestSchedule // ★ここを追加！途中のデータも送る
             });
         }
 
