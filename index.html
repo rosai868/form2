@@ -1686,7 +1686,10 @@
 // ★ ここまで
 // ============================================================
 
-        function displayScheduleResults(data, monthKey) {
+        // index.html 内の displayScheduleResults をこれに置き換え
+
+            function displayScheduleResults(data, monthKey) {
+                console.log("結果表示開始:", data); // デバッグ用ログ
                 currentScheduleData = data;
                 
                 resultsArea.innerHTML = `
@@ -1697,36 +1700,53 @@
                     </div>
                 `;
                 
-                if (!data || !data.drafts) {
-                    resultsArea.innerHTML += '<p class="error-message">スケジュールデータが見つかりません</p>';
+                if (!data || !data.drafts || !data.drafts.draft1) {
+                    resultsArea.innerHTML += '<p class="error-message">データが正しく受け取れませんでした。</p>';
                     return;
                 }
                 
-                const draft = data.drafts.draft1;
-                const confirmButtonId = 'confirm-draft1';
-                
-                const draftDiv = document.createElement('div');
-                draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
-                
-                draftDiv.innerHTML = `
-                    <div style="background: #F8F8F8; padding: 10px 15px;">
-                        <h4 style="color: #5D4037;">${draft.type || '勤務表'} (スコア: ${draft.score})</h4>
-                    </div>
-                    <div style="padding: 15px; overflow-x: auto;">
-                        ${generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin)}
-                        <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
-                            <i class="fas fa-check"></i> この案で確定する
-                        </button>
-                    </div>
-                `;
-                
-                resultsArea.appendChild(draftDiv);
-                
-                document.getElementById(confirmButtonId).addEventListener('click', function() {
-                    confirmSchedule('draft1');
-                });
-                
-                enableShiftSwap('draft1');
+                try {
+                    const draft = data.drafts.draft1;
+                    // スコアが無い場合の対策
+                    const scoreDisplay = (draft.score !== undefined) ? draft.score.toLocaleString() : "不明";
+                    const confirmButtonId = 'confirm-draft1';
+                    
+                    const draftDiv = document.createElement('div');
+                    draftDiv.style = "margin-top: 20px; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden;";
+                    
+                    // テーブル生成（エラーハンドリング付き）
+                    let tableHTML = "";
+                    try {
+                        tableHTML = generateScheduleTableHTML(draft.schedule, monthKey, staffListForAdmin);
+                    } catch (e) {
+                        console.error("テーブル生成エラー:", e);
+                        tableHTML = `<p class="error-message">表の生成に失敗しました: ${e.message}</p>`;
+                    }
+
+                    draftDiv.innerHTML = `
+                        <div style="background: #F8F8F8; padding: 10px 15px;">
+                            <h4 style="color: #5D4037;">自動生成結果 (ペナルティ: ${scoreDisplay})</h4>
+                        </div>
+                        <div style="padding: 15px; overflow-x: auto;">
+                            ${tableHTML}
+                            <button id="${confirmButtonId}" style="background: #1976D2; margin-top: 15px; width: auto; padding: 8px 15px; font-size: 14px;">
+                                <i class="fas fa-check"></i> この案で確定する
+                            </button>
+                        </div>
+                    `;
+                    
+                    resultsArea.appendChild(draftDiv);
+                    
+                    document.getElementById(confirmButtonId).addEventListener('click', function() {
+                        confirmSchedule('draft1');
+                    });
+                    
+                    enableShiftSwap('draft1');
+
+                } catch (err) {
+                    console.error("表示エラー:", err);
+                    resultsArea.innerHTML += `<p class="error-message">結果表示中にエラーが発生しました: ${err.message}</p>`;
+                }
             }
 
             function generateScheduleTableHTML(schedule, monthKey, staff) {
