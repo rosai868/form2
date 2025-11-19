@@ -524,7 +524,9 @@
         const modal = document.getElementById('shift-swap-modal');
         const content = document.getElementById('swap-modal-content');
         
-        const monthKey = currentMonth.toISOString().slice(0, 7);
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth() + 1;
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`;
         const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), date);
         const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
         
@@ -2114,13 +2116,6 @@ function finishCalculation(schedule, score) {
                 return table;
             }
 
-            function confirmSchedule(draftKey) {
-                if (!confirm(`「${draftKey}」を最終的な勤務表として確定しますか？\n（現在この機能は開発中です）`)) {
-                    return;
-                }
-                alert(`${draftKey} が確定されました。（機能は開発中です）`);
-            }
-
         } catch (error) {
             console.error('初期化エラー:', error);
             document.getElementById('loadingSection').innerHTML = 
@@ -2131,6 +2126,44 @@ function finishCalculation(schedule, score) {
                 '</div>';
         }
     });
+
+    async function confirmSchedule(draftKey) {
+        // データがなければ何もしない
+        if (!currentScheduleData || !currentScheduleData.drafts) return;
+
+        // 画面に表示されているスケジュールデータを取得
+        const scheduleToSave = currentScheduleData.drafts[draftKey].schedule;
+        
+        // 保存用の年月キーを作成 (例: "2025-12")
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth() + 1;
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+
+        // 確認ダイアログ
+        if (!confirm(`${monthKey} の勤務表として確定・保存しますか？\n（以前のデータは上書きされます）`)) {
+            return;
+        }
+
+        try {
+            // Firestoreに保存
+            await firestore.collection('Schedules').doc(monthKey).set({
+                drafts: {
+                    draft1: {
+                        schedule: scheduleToSave,
+                        type: 'confirmed',
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }
+                },
+                confirmed: true
+            }, { merge: true });
+
+            alert('保存しました！');
+            
+        } catch (error) {
+            console.error("保存エラー:", error);
+            alert('保存に失敗しました: ' + error.message);
+        }
+    }
     </script>
 </body>
 </html>
